@@ -584,8 +584,12 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
       </div>
 
       {/* Footer */}
-      <footer className="text-center text-xs text-slate-500 font-medium mt-6">
-        © 2026 Cikgu Xie™ — Sistem e-Amaran Kehadiran Murid Sekolah
+      <footer className="text-center text-xs text-slate-500 font-medium mt-6 flex items-center justify-center gap-2">
+        <span>© 2026 e-Amaran Kehadiran</span>
+        <span>•</span>
+        <span className="font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+          BY CIKGU XIE
+        </span>
       </footer>
     </div>
   );

@@ -11,6 +11,7 @@ import { StatusBadge } from '../../components/common/StatusBadge';
 import { StudentProfileModal } from '../../components/attendance/StudentProfileModal';
 import { AddAttendanceModal } from '../../components/attendance/AddAttendanceModal';
 import { sortSchoolClasses } from '../../utils/classOrder';
+import { useAuth } from '../../context/AuthContext';
 import {
   BarChart,
   Bar,
@@ -56,6 +57,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onNavigate,
   onRefreshData,
 }) => {
+  const { user } = useAuth();
+  const userName = user?.name ? user.name.toUpperCase() : 'PENTADBIR';
   const [selectedStudentStatus, setSelectedStudentStatus] = useState<StudentWarningStatus | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
 
@@ -116,10 +119,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Header Dashboard & Fast Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            Dashboard Pentadbir Sekolah
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold mb-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+            <span>Dashboard Pentadbir Sekolah</span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+            SELAMAT DATANG KEPADA {userName}
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 mt-1">
             Pemantauan ketidakhadiran murid & status rekod pengeluaran surat amaran peringkat sekolah
           </p>
         </div>

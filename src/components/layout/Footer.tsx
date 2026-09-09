@@ -10,8 +10,12 @@ export const Footer: React.FC = () => {
           <span className="text-slate-400">|</span>
           <span className="text-slate-500 font-normal">Sistem Pemantauan Ketidakhadiran & Rekod Surat Amaran Murid</span>
         </div>
-        <div className="font-semibold text-slate-600 tracking-wide">
-          © 2026 Cikgu Xie™ — All Rights Reserved
+        <div className="font-bold text-slate-700 tracking-wide flex items-center gap-1.5">
+          <span className="px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold tracking-wider">
+            BY CIKGU XIE
+          </span>
+          <span className="text-slate-400">|</span>
+          <span className="text-slate-500 font-normal">© 2026 Hak Cipta Terpelihara</span>
         </div>
       </div>
     </footer>

@@ -78,14 +78,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* Header Guru Kelas */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold mb-1">
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold mb-1.5">
             <span>Portal Guru Kelas: {assignedClass}</span>
           </div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            Dashboard Guru Kelas ({assignedClass})
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+            SELAMAT DATANG KEPADA {user?.name ? user.name.toUpperCase() : 'GURU KELAS'}
           </h2>
-          <p className="text-xs text-slate-500">
-            Selamat kembali, <strong>{user?.name}</strong>. Anda mengurus pemantauan kehadiran bagi kelas {assignedClass}.
+          <p className="text-xs text-slate-500 mt-1">
+            Dashboard Guru Kelas ({assignedClass}) • Pemantauan kehadiran & tindakan surat amaran
           </p>
         </div>
 
