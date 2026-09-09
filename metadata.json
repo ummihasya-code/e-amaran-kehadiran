@@ -1,0 +1,6 @@
+{
+  "name": "e-AMARAN KEHADIRAN",
+  "description": "Sistem Pemantauan Ketidakhadiran & Rekod Surat Amaran Murid",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

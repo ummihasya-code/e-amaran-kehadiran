@@ -1,0 +1,153 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Pengguna sistem seperti Admin atau Guru Kelas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID unik pengguna (UID)" },
+        "name": { "type": "string", "description": "Nama penuh pengguna", "maxLength": 150 },
+        "email": { "type": "string", "description": "Alamat emel pengguna", "maxLength": 150 },
+        "role": { "type": "string", "description": "Peranan pengguna (admin atau teacher)", "enum": ["admin", "teacher"] },
+        "assignedClasses": { "type": "array", "description": "Senarai ID kelas yang ditugaskan kepada guru" },
+        "active": { "type": "boolean", "description": "Status aktif akaun" },
+        "createdAt": { "type": "string", "description": "Tarikh dicipta" }
+      },
+      "required": ["id", "name", "email", "role", "active", "createdAt"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Maklumat murid yang berdaftar",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID unik murid" },
+        "name": { "type": "string", "description": "Nama murid", "maxLength": 200 },
+        "classId": { "type": "string", "description": "ID kelas murid" },
+        "className": { "type": "string", "description": "Nama kelas murid (cth: 3 AA)", "maxLength": 50 },
+        "studentNumber": { "type": "string", "description": "Nombor matrik/KP murid jika ada", "maxLength": 50 },
+        "createdAt": { "type": "string", "description": "Tarikh rekod dicipta" },
+        "updatedAt": { "type": "string", "description": "Tarikh rekod dikemaskini" }
+      },
+      "required": ["id", "name", "classId", "className", "createdAt"]
+    },
+    "Class": {
+      "title": "Class",
+      "description": "Maklumat kelas dalam sekolah",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID unik kelas" },
+        "className": { "type": "string", "description": "Nama kelas (cth: 3 AA)", "maxLength": 50 },
+        "teacherId": { "type": "string", "description": "ID guru kelas yang bertanggungjawab" },
+        "teacherName": { "type": "string", "description": "Nama guru kelas", "maxLength": 150 },
+        "active": { "type": "boolean", "description": "Status aktif kelas" }
+      },
+      "required": ["id", "className", "active"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Rekod ketidakhadiran murid harian",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID unik rekod (fingerprint studentId_date_reason)" },
+        "studentId": { "type": "string", "description": "ID murid" },
+        "classId": { "type": "string", "description": "ID kelas murid" },
+        "className": { "type": "string", "description": "Nama kelas murid", "maxLength": 50 },
+        "date": { "type": "string", "description": "Tarikh tidak hadir (YYYY-MM-DD)" },
+        "reason": { "type": "string", "description": "Sebab tidak hadir", "maxLength": 255 },
+        "countsTowardsWarning": { "type": "boolean", "description": "Sama ada rekod dikira dalam amaran (false jika surat doktor disahkan)" },
+        "createdAt": { "type": "string", "description": "Tarikh rekod ditambah" },
+        "createdBy": { "type": "string", "description": "UID pengguna yang menambah rekod" },
+        "updatedAt": { "type": "string", "description": "Tarikh kemaskini" },
+        "updatedBy": { "type": "string", "description": "UID pengguna yang mengemaskini" },
+        "isDeleted": { "type": "boolean", "description": "Penanda soft delete" },
+        "deletedAt": { "type": "string", "description": "Tarikh dipadam" },
+        "deletedBy": { "type": "string", "description": "UID pemadam" },
+        "deleteReason": { "type": "string", "description": "Sebab dipadam", "maxLength": 255 }
+      },
+      "required": ["id", "studentId", "classId", "className", "date", "reason", "countsTowardsWarning", "createdAt", "createdBy"]
+    },
+    "WarningLetter": {
+      "title": "WarningLetter",
+      "description": "Rekod tarikh surat amaran yang telah dikeluarkan melalui idMe / MOEIS",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID unik amaran (studentId_warningType)" },
+        "studentId": { "type": "string", "description": "ID murid" },
+        "warningType": { "type": "string", "description": "Peringkat amaran", "enum": ["warning1", "warning2", "warning3"] },
+        "issueDate": { "type": "string", "description": "Tarikh surat dikeluarkan (YYYY-MM-DD)" },
+        "recordedAt": { "type": "string", "description": "Tarikh rekod dimasukkan ke e-AMARAN" },
+        "recordedBy": { "type": "string", "description": "Nama atau UID pengguna yang merekod" },
+        "updatedAt": { "type": "string", "description": "Tarikh kemaskini tarikh surat" },
+        "updatedBy": { "type": "string", "description": "Nama atau UID pengguna yang mengemaskini" },
+        "notes": { "type": "string", "description": "Catatan tambahan", "maxLength": 500 }
+      },
+      "required": ["id", "studentId", "warningType", "issueDate", "recordedAt", "recordedBy"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Jejak audit keselamatan bagi setiap tindakan penting",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID jejak audit" },
+        "userId": { "type": "string", "description": "UID pengguna" },
+        "userName": { "type": "string", "description": "Nama pengguna", "maxLength": 150 },
+        "action": { "type": "string", "description": "Jenis tindakan (Import, Tambah, Edit, Soft Delete, Rekod Surat, dll)", "maxLength": 100 },
+        "targetType": { "type": "string", "description": "Entiti sasaran (attendance, warningLetter, student, class, user, settings)", "maxLength": 50 },
+        "targetId": { "type": "string", "description": "ID entiti sasaran", "maxLength": 100 },
+        "timestamp": { "type": "string", "description": "Masa kejadian ISO" },
+        "metadata": { "type": "object", "description": "Data terperinci tindakan" }
+      },
+      "required": ["id", "userId", "action", "targetType", "targetId", "timestamp"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Konfigurasi peraturan dan threshold surat amaran KPM",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID tetapan (cth: rules)" },
+        "warning1Threshold": { "type": "number", "description": "Had rekod untuk Amaran 1" },
+        "warning2Threshold": { "type": "number", "description": "Had rekod untuk Amaran 2" },
+        "warning3Threshold": { "type": "number", "description": "Had rekod untuk Amaran 3" },
+        "calculationMethod": { "type": "string", "description": "Kaedah pengiraan (cth: kumulatif)" },
+        "unit": { "type": "string", "description": "Unit (cth: Hari)" },
+        "period": { "type": "string", "description": "Tempoh (cth: Tahunan)" },
+        "isActive": { "type": "boolean", "description": "Status aktif peraturan" },
+        "notes": { "type": "string", "description": "Catatan peraturan", "maxLength": 500 },
+        "referenceSource": { "type": "string", "description": "Sumber rujukan surat siaran KPM", "maxLength": 300 },
+        "updatedAt": { "type": "string", "description": "Tarikh kemaskini tetapan" },
+        "updatedBy": { "type": "string", "description": "Pengguna yang mengemaskini tetapan" }
+      },
+      "required": ["id", "warning1Threshold", "warning2Threshold", "warning3Threshold", "isActive"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Profil pengguna sistem (Admin & Guru Kelas)"
+    },
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Data murid berdaftar"
+    },
+    "/classes/{classId}": {
+      "schema": "Class",
+      "description": "Senarai kelas dan penugasan guru kelas"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "Attendance",
+      "description": "Rekod ketidakhadiran murid harian"
+    },
+    "/warningLetters/{warningId}": {
+      "schema": "WarningLetter",
+      "description": "Rekod tarikh surat amaran yang telah dikeluarkan"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Jejak audit aktiviti sistem yang tidak boleh dipadam"
+    },
+    "/settings/{settingId}": {
+      "schema": "Setting",
+      "description": "Konfigurasi tetapan dan threshold KPM"
+    }
+  }
+}
