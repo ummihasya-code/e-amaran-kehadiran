@@ -510,12 +510,286 @@ export async function parseExcelOrCsvFile(
 }
 
 /**
+ * Memproses teks kehadiran yang disalin terus (copy & paste) dari idMe / jadual web / hamparan.
+ * Menyokong format lazim idMe:
+ * Format 4 kolum: Bil | Tarikh | Nama Murid | Sebab
+ * Format 5 kolum: Bil | Tarikh | Nama Murid | Kelas | Sebab
+ * Format 3 kolum: Tarikh | Nama Murid | Sebab
+ * Menyokong pemisah tab, pipe, titik bertindih, atau 2+ ruang kosong,
+ * sama ada dengan baris tajuk (header) atau tanpa baris tajuk.
+ */
+export function parsePastedIdmeText(
+  rawText: string,
+  defaultClassName?: string
+): ParseExcelResult {
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  if (lines.length === 0) {
+    return {
+      rows: [],
+      detectedColumns: {
+        bilColIndex: -1,
+        namaColIndex: -1,
+        kelasColIndex: -1,
+        tarikhColIndex: -1,
+        sebabColIndex: -1,
+        rawHeaders: [],
+        headerRowIdx: 0,
+      },
+      rawMatrix: [],
+    };
+  }
+
+  // Pisahkan baris kepada sel (matriks)
+  const rawMatrix: string[][] = lines.map((line) => {
+    if (line.includes('\t')) {
+      return line.split('\t').map((c) => c.trim());
+    }
+    if (line.includes('|')) {
+      return line
+        .split('|')
+        .map((c) => c.trim())
+        .filter((c) => c.length > 0);
+    }
+    if (
+      line.includes(';') ||
+      (line.includes(',') && !line.toUpperCase().includes('BIN') && !line.toUpperCase().includes('BINTI'))
+    ) {
+      return line.split(/[;,]/).map((c) => c.trim());
+    }
+    return line.split(/\s{2,}|\t/).map((c) => c.trim()).filter(Boolean);
+  });
+
+  // Semak jika baris pertama adalah baris tajuk (header)
+  const firstRow = rawMatrix[0];
+  const isHeaderWord = (s: string) => {
+    const l = s.toLowerCase();
+    return (
+      l.includes('tarikh') ||
+      l.includes('date') ||
+      l.includes('tkh') ||
+      l.includes('nama') ||
+      l.includes('murid') ||
+      l.includes('student') ||
+      l.includes('pelajar') ||
+      l.includes('sebab') ||
+      l.includes('alasan') ||
+      l.includes('catatan') ||
+      l.includes('kelas') ||
+      l.includes('keterangan') ||
+      l === 'bil' ||
+      l === 'bil.' ||
+      l === 'no' ||
+      l === 'no.'
+    );
+  };
+
+  const headerMatches = firstRow.filter(isHeaderWord).length;
+  const hasHeaderRow = headerMatches >= 2;
+  const headerRowIdx = hasHeaderRow ? 0 : -1;
+  const dataRows = hasHeaderRow ? rawMatrix.slice(1) : rawMatrix;
+
+  const numCols = Math.max(...rawMatrix.map((r) => r.length));
+  let bilCol = -1;
+  let tarikhCol = -1;
+  let kelasCol = -1;
+  let namaCol = -1;
+  let sebabCol = -1;
+  let rawHeaders: string[] = hasHeaderRow ? [...firstRow] : [];
+
+  if (hasHeaderRow) {
+    for (let c = 0; c < firstRow.length; c++) {
+      const h = firstRow[c].toLowerCase();
+      if ((h.includes('bil') || h === 'no' || h === 'no.') && bilCol === -1) {
+        bilCol = c;
+      } else if ((h.includes('tarikh') || h.includes('date') || h.includes('tkh')) && tarikhCol === -1) {
+        tarikhCol = c;
+      } else if ((h.includes('nama') || h.includes('murid') || h.includes('pelajar') || h.includes('student')) && namaCol === -1) {
+        namaCol = c;
+      } else if ((h.includes('kelas') || h.includes('tingkatan') || h.includes('darjah') || h.includes('class')) && kelasCol === -1) {
+        kelasCol = c;
+      } else if (
+        (h.includes('sebab') ||
+          h.includes('catatan') ||
+          h.includes('alasan') ||
+          h.includes('keterangan') ||
+          h.includes('status')) &&
+        sebabCol === -1
+      ) {
+        sebabCol = c;
+      }
+    }
+  }
+
+  // Pengesanan pintar berdasarkan corak data jika tiada header atau belum lengkap
+  const isDateCell = (s: string) => {
+    if (!s) return false;
+    const str = s.trim();
+    return (
+      /^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}$/.test(str) ||
+      /^\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}$/.test(str)
+    );
+  };
+
+  const isBilCell = (s: string) => {
+    if (!s) return false;
+    return /^\d{1,4}\.?$/.test(s.trim());
+  };
+
+  const isClassCell = (s: string) => {
+    if (!s) return false;
+    const str = s.trim().toUpperCase();
+    return (
+      /^([1-6]|TINGKATAN\s*[1-6]|TAHUN\s*[1-6]|PERALIHAN)\s*[\w\-]+$/i.test(str) ||
+      ['3 AA', '3 BB', '3 CC', '3 DD', '3 EE', '4 AL-GHAZALI', '5 CEMERLANG'].includes(str)
+    );
+  };
+
+  const isReasonCell = (s: string) => {
+    if (!s) return false;
+    const u = s.trim().toUpperCase();
+    return (
+      u.includes('MASALAH') ||
+      u.includes('MAKLUMAN') ||
+      u.includes('TEMUJANJI') ||
+      u.includes('PONTENG') ||
+      u.includes('SAKIT') ||
+      u.includes('CUTI') ||
+      u.includes('HOSPITAL') ||
+      u.includes('KLINIK') ||
+      u.includes('URUSAN') ||
+      u.includes('KECEMASAN') ||
+      u.includes('TIADA') ||
+      u.includes('BERSEBAB') ||
+      u.includes('DOKTOR') ||
+      u.includes('KELUARGA') ||
+      u.includes('PENGANGKUTAN') ||
+      u.includes('IBU BAPA')
+    );
+  };
+
+  for (let c = 0; c < numCols; c++) {
+    const colVals = dataRows.map((r) => r[c] || '').filter(Boolean);
+    if (colVals.length === 0) continue;
+
+    // Tarikh
+    if (tarikhCol === -1) {
+      const dateCount = colVals.filter(isDateCell).length;
+      if (dateCount / colVals.length >= 0.4) {
+        tarikhCol = c;
+        continue;
+      }
+    }
+
+    // Bil
+    if (bilCol === -1) {
+      const bilCount = colVals.filter(isBilCell).length;
+      if (bilCount / colVals.length >= 0.7) {
+        bilCol = c;
+        continue;
+      }
+    }
+
+    // Kelas
+    if (kelasCol === -1) {
+      const classCount = colVals.filter(isClassCell).length;
+      if (classCount / colVals.length >= 0.5) {
+        kelasCol = c;
+        continue;
+      }
+    }
+  }
+
+  // Tentukan namaCol dan sebabCol dari lajur yang berbaki
+  const remaining: number[] = [];
+  for (let c = 0; c < numCols; c++) {
+    if (c !== bilCol && c !== tarikhCol && c !== kelasCol) {
+      remaining.push(c);
+    }
+  }
+
+  if (namaCol === -1 || sebabCol === -1) {
+    if (remaining.length >= 2) {
+      const r0Reasons = dataRows.map((r) => r[remaining[0]] || '').filter(isReasonCell).length;
+      const r1Reasons = dataRows.map((r) => r[remaining[1]] || '').filter(isReasonCell).length;
+      if (r1Reasons > r0Reasons) {
+        if (namaCol === -1) namaCol = remaining[0];
+        if (sebabCol === -1) sebabCol = remaining[1];
+      } else if (r0Reasons > r1Reasons) {
+        if (sebabCol === -1) sebabCol = remaining[0];
+        if (namaCol === -1) namaCol = remaining[1];
+      } else {
+        // Lazimnya nama murid berada sebelum sebab tidak hadir
+        if (namaCol === -1) namaCol = remaining[0];
+        if (sebabCol === -1) sebabCol = remaining[1];
+      }
+    } else if (remaining.length === 1) {
+      if (namaCol === -1) namaCol = remaining[0];
+    }
+  }
+
+  // Tetapkan rawHeaders jika tiada
+  if (!hasHeaderRow) {
+    rawHeaders = [];
+    for (let c = 0; c < numCols; c++) {
+      if (c === bilCol) rawHeaders.push('Bil');
+      else if (c === tarikhCol) rawHeaders.push('Tarikh');
+      else if (c === namaCol) rawHeaders.push('Nama Murid');
+      else if (c === kelasCol) rawHeaders.push('Kelas');
+      else if (c === sebabCol) rawHeaders.push('Sebab Tidak Hadir');
+      else rawHeaders.push(`Kolum ${c + 1}`);
+    }
+  }
+
+  const rows: ParsedExcelRow[] = [];
+  for (const r of dataRows) {
+    const rawNama = namaCol !== -1 ? r[namaCol] || '' : '';
+    const rawTarikh = tarikhCol !== -1 ? r[tarikhCol] || '' : '';
+    const rawSebab = sebabCol !== -1 ? r[sebabCol] || '' : '';
+    const rawKelas = kelasCol !== -1 ? r[kelasCol] || '' : defaultClassName || '';
+    const rawBil = bilCol !== -1 ? r[bilCol] : undefined;
+
+    if (!rawNama && !rawTarikh) continue;
+
+    rows.push({
+      bil: rawBil,
+      nama: rawNama.trim(),
+      tarikh: rawTarikh.trim(),
+      sebab: normalizeAbsenceReason(rawSebab),
+      kelas: rawKelas.trim(),
+    });
+  }
+
+  return {
+    rows,
+    detectedColumns: {
+      bilColIndex: bilCol,
+      namaColIndex: namaCol,
+      kelasColIndex: kelasCol,
+      tarikhColIndex: tarikhCol,
+      sebabColIndex: sebabCol,
+      namaHeader: rawHeaders[namaCol] || 'Nama Murid',
+      kelasHeader: kelasCol !== -1 ? rawHeaders[kelasCol] || 'Kelas' : 'Kelas',
+      tarikhHeader: rawHeaders[tarikhCol] || 'Tarikh',
+      sebabHeader: rawHeaders[sebabCol] || 'Sebab Tidak Hadir',
+      rawHeaders,
+      headerRowIdx: headerRowIdx >= 0 ? headerRowIdx : 0,
+    },
+    rawMatrix,
+  };
+}
+
+/**
  * Menjana Preview Import dan memeriksa duplicate serta mengira statistik.
  * Mengenal pasti kelas-kelas baharu yang perlu ditambah secara auto mengikut murid.
  */
 export async function generateImportPreview(
   parsedRows: ParsedExcelRow[],
-  detectedColumnsInfo?: DetectedColumnsInfo
+  detectedColumnsInfo?: DetectedColumnsInfo,
+  defaultClassName?: string
 ): Promise<ImportPreviewResult> {
   const existingStudents = await dataService.getStudents();
   const existingClasses = await dataService.getClasses();
@@ -592,6 +866,19 @@ export async function generateImportPreview(
   for (let i = 0; i < parsedRows.length; i++) {
     const row = parsedRows[i];
     const rowNum = i + 1;
+
+    // Jika kelas tidak dinyatakan dalam baris fail / teks, semak jika murid telah wujud dalam pangkalan data
+    // atau gunakan kelas sasaran / lalai
+    if (!row.kelas && row.nama) {
+      const matched = findMatchingStudent(existingStudents, row.nama, '');
+      if (matched && matched.className) {
+        row.kelas = matched.className;
+      } else if (defaultClassName) {
+        row.kelas = defaultClassName;
+      } else if (existingClasses.length > 0) {
+        row.kelas = existingClasses[0].className;
+      }
+    }
 
     // Nama dan Kelas adalah wajib untuk mendaftar murid & kelas
     if (!row.nama || !row.kelas) {

@@ -1,12 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { ImportPreviewResult } from '../../types';
+import { ImportPreviewResult, SchoolClass } from '../../types';
 import {
   parseExcelOrCsvDetailed,
+  parsePastedIdmeText,
   generateImportPreview,
   commitImport,
   DetectedColumnsInfo,
 } from '../../services/importEngine';
+import { dataService } from '../../services/dataService';
 import { useToast } from '../../components/common/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { formatDateDisplay } from '../../utils/dateUtils';
@@ -21,6 +23,11 @@ import {
   RefreshCw,
   FileText,
   Sliders,
+  ClipboardPaste,
+  Zap,
+  Sparkles,
+  Trash2,
+  Check,
 } from 'lucide-react';
 
 interface AdminImportProps {
@@ -38,6 +45,7 @@ export const AdminImport: React.FC<AdminImportProps> = ({ onImportComplete }) =>
   const [selectedSebabCol, setSelectedSebabCol] = useState<number | undefined>(undefined);
   const [isParsing, setIsParsing] = useState<boolean>(false);
   const [isCommitting, setIsCommitting] = useState<boolean>(false);
+  const [isDirectImporting, setIsDirectImporting] = useState<boolean>(false);
   const [preview, setPreview] = useState<ImportPreviewResult | null>(null);
   const [importReport, setImportReport] = useState<{
     added: number;
@@ -48,6 +56,33 @@ export const AdminImport: React.FC<AdminImportProps> = ({ onImportComplete }) =>
     createdStudentsCount: number;
     createdClassNames: string[];
   } | null>(null);
+
+  // Mod Import: 'paste' (Salin & Tampal dari idMe) atau 'upload' (Muat Naik Fail)
+  const [importMode, setImportMode] = useState<'paste' | 'upload'>('paste');
+  const [pastedText, setPastedText] = useState<string>('');
+  const [existingClasses, setExistingClasses] = useState<SchoolClass[]>([]);
+  const [selectedClassOption, setSelectedClassOption] = useState<string>('3 AA');
+  const [customClassName, setCustomClassName] = useState<string>('');
+
+  useEffect(() => {
+    let isMounted = true;
+    dataService.getClasses().then((clsList) => {
+      if (isMounted && clsList.length > 0) {
+        setExistingClasses(clsList);
+        if (!selectedClassOption || selectedClassOption === '3 AA') {
+          setSelectedClassOption(clsList[0].className);
+        }
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const effectiveTargetClass =
+    selectedClassOption === '__CUSTOM__'
+      ? customClassName.trim().toUpperCase() || '3 AA'
+      : selectedClassOption;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -144,8 +179,118 @@ export const AdminImport: React.FC<AdminImportProps> = ({ onImportComplete }) =>
     setSelectedSebabCol(undefined);
     setPreview(null);
     setImportReport(null);
+    setPastedText('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  const handleLoadSampleIdme = () => {
+    const sample = `1\t13/08/2026\tAHMAD HARRAZ RUSYAIDI BIN NOR HAMIZAN\tMASALAH PENGANGKUTAN
+2\t16/01/2026\tAHMAD HARRAZ RUSYAIDI BIN NOR HAMIZAN\tMAKLUMAN IBU BAPA PENJAGA
+3\t10/04/2026\tAHMAD HARRAZ RUSYAIDI BIN NOR HAMIZAN\tMAKLUMAN IBU BAPA PENJAGA
+4\t07/07/2026\tAHMAD HARRAZ RUSYAIDI BIN NOR HAMIZAN\tTEMUJANJI HOSPITAL/KLINIK
+5\t26/06/2026\tAHMAD HARRAZ RUSYAIDI BIN NOR HAMIZAN\tMAKLUMAN IBU BAPA PENJAGA
+6\t18/05/2026\tAHMAD HARRAZ RUSYAIDI BIN NOR HAMIZAN\tMAKLUMAN IBU BAPA PENJAGA`;
+    setPastedText(sample);
+    showToast('📋 Contoh data idMe Ahmad Harraz telah dimasukkan.', 'info');
+  };
+
+  const handleDirectPasteImport = async () => {
+    if (!pastedText.trim()) {
+      showToast('Sila salin dan tampal data kehadiran dari idMe terlebih dahulu.', 'warning');
+      return;
+    }
+
+    setIsDirectImporting(true);
+    setPreview(null);
+    setImportReport(null);
+
+    try {
+      const parseResult = parsePastedIdmeText(pastedText, effectiveTargetClass);
+      if (parseResult.rows.length === 0) {
+        showToast('Tiada baris rekod yang sah dapat diekstrak daripada teks yang ditampal.', 'warning');
+        setIsDirectImporting(false);
+        return;
+      }
+
+      setDetectedColumns(parseResult.detectedColumns);
+      setSelectedSebabCol(parseResult.detectedColumns.sebabColIndex);
+
+      const previewRes = await generateImportPreview(
+        parseResult.rows,
+        parseResult.detectedColumns,
+        effectiveTargetClass
+      );
+
+      if (previewRes.parsedRecords.length === 0 && previewRes.newStudentsCount === 0) {
+        showToast('Tiada rekod kehadiran baharu untuk dimasukkan.', 'info');
+        setIsDirectImporting(false);
+        return;
+      }
+
+      const res = await commitImport(
+        previewRes,
+        user ? { id: user.id, name: user.name } : undefined
+      );
+
+      setImportReport({
+        added: res.addedCount,
+        updated: res.updatedCount || 0,
+        duplicate: res.duplicateCount,
+        existing: res.existingCount,
+        createdClassesCount: res.createdClassesCount,
+        createdStudentsCount: res.createdStudentsCount,
+        createdClassNames: res.createdClassNames,
+      });
+
+      let successMsg = `✅ Selesai! ${res.addedCount} rekod kehadiran berjaya dimasukkan terus ke dalam sistem.`;
+      if (res.createdStudentsCount > 0) {
+        successMsg += ` (${res.createdStudentsCount} murid baharu didaftarkan)`;
+      }
+      showToast(successMsg, 'success');
+      onImportComplete();
+    } catch (err: any) {
+      console.error(err);
+      showToast('❌ Ralat memproses data terus ke pangkalan data.', 'error');
+    } finally {
+      setIsDirectImporting(false);
+    }
+  };
+
+  const handlePreviewPastedText = async () => {
+    if (!pastedText.trim()) {
+      showToast('Sila salin dan tampal data kehadiran dari idMe terlebih dahulu.', 'warning');
+      return;
+    }
+
+    setIsParsing(true);
+    setPreview(null);
+    setImportReport(null);
+
+    try {
+      const parseResult = parsePastedIdmeText(pastedText, effectiveTargetClass);
+      if (parseResult.rows.length === 0) {
+        showToast('Tiada baris rekod yang sah dapat diekstrak daripada teks yang ditampal.', 'warning');
+        setIsParsing(false);
+        return;
+      }
+
+      setDetectedColumns(parseResult.detectedColumns);
+      setSelectedSebabCol(parseResult.detectedColumns.sebabColIndex);
+
+      const previewRes = await generateImportPreview(
+        parseResult.rows,
+        parseResult.detectedColumns,
+        effectiveTargetClass
+      );
+      setPreview(previewRes);
+      showToast(`🔍 ${parseResult.rows.length} rekod sedia untuk semakan pratonton.`, 'info');
+    } catch (err: any) {
+      console.error(err);
+      showToast('Ralat menganalisis teks yang ditampal.', 'error');
+    } finally {
+      setIsParsing(false);
     }
   };
 
@@ -288,34 +433,192 @@ export const AdminImport: React.FC<AdminImportProps> = ({ onImportComplete }) =>
         </ul>
       </div>
 
-      {/* Upload Box (Drag and Drop / Click) */}
+      {/* Tab Pilihan Kaedah Import: Salin & Tampal dari idMe ATAU Muat Naik Fail */}
       {!preview && !importReport && (
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-slate-300 hover:border-emerald-500 bg-white hover:bg-emerald-50/20 rounded-2xl p-10 text-center cursor-pointer transition flex flex-col items-center justify-center gap-3"
-        >
-          <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs">
-            <Upload className="w-7 h-7" />
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+            <button
+              type="button"
+              onClick={() => setImportMode('paste')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition ${
+                importMode === 'paste'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <ClipboardPaste className="w-4 h-4" />
+              <span>Salin & Tampal Terus dari idMe</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                  importMode === 'paste' ? 'bg-emerald-700 text-emerald-100' : 'bg-emerald-100 text-emerald-800'
+                }`}
+              >
+                Pantas
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setImportMode('upload')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition ${
+                importMode === 'upload'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <Upload className="w-4 h-4" />
+              <span>Muat Naik Fail (Excel / CSV)</span>
+            </button>
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-800">
-              {isParsing ? 'Sedang Menganalisis Fail...' : 'Klik atau Seret Fail Ke Sini'}
-            </h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Menyokong fail Excel (.xlsx, .xls) dan CSV mengikut format kehadiran sekolah (idMe, APDM, atau tersuai).
-            </p>
-            <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 text-[11px] font-medium border border-emerald-200">
-              <span>📅</span>
-              <span>Pengecaman Tarikh Pintar: <strong>DD/MM/YYYY</strong>, <strong>DD-MM-YYYY</strong>, <strong>DD.MM.YYYY</strong>, nombor siri Excel, atau nama bulan (cth: 16 Sep 2026).</span>
+
+          {/* KAEDAH 1: SALIN & TAMPAL DARI IDME */}
+          {importMode === 'paste' && (
+            <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <ClipboardPaste className="w-4 h-4 text-emerald-600" />
+                    <span>Tampal Data Kehadiran dari idMe</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Highlight dan salin (Copy) rekod ketidakhadiran dari portal idMe, kemudian tampal (Paste) di ruangan bawah.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleLoadSampleIdme}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1.5 transition"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Isi Contoh idMe (Ahmad Harraz)</span>
+                  </button>
+                  {pastedText && (
+                    <button
+                      type="button"
+                      onClick={() => setPastedText('')}
+                      className="px-2.5 py-1.5 text-xs font-medium rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Kosongkan</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Pilihan Kelas Sasaran jika tiada lajur Kelas dalam teks */}
+              <div className="bg-slate-50/80 rounded-xl p-3.5 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>Kelas Sasaran / Lalai:</span>
+                    <span className="text-[10px] font-normal text-slate-500">
+                      (Digunakan jika teks idMe tidak mempunyai kolum kelas. Murid sedia ada akan dipadankan secara automatik)
+                    </span>
+                  </label>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <select
+                    value={selectedClassOption}
+                    onChange={(e) => setSelectedClassOption(e.target.value)}
+                    className="text-xs font-semibold border border-slate-300 rounded-lg px-3 py-1.5 bg-white text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                  >
+                    {existingClasses.map((c) => (
+                      <option key={c.id} value={c.className}>
+                        {c.className}
+                      </option>
+                    ))}
+                    {existingClasses.length === 0 && (
+                      <option value="3 AA">3 AA</option>
+                    )}
+                    <option value="__CUSTOM__">+ Cipta / Taip Kelas Baharu</option>
+                  </select>
+                  {selectedClassOption === '__CUSTOM__' && (
+                    <input
+                      type="text"
+                      placeholder="Cth: 4 AL-GHAZALI"
+                      value={customClassName}
+                      onChange={(e) => setCustomClassName(e.target.value)}
+                      className="text-xs uppercase border border-emerald-400 rounded-lg px-2.5 py-1.5 bg-white text-slate-800 w-36 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-bold"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Ruang Textarea Tampal */}
+              <div className="relative">
+                <textarea
+                  rows={8}
+                  value={pastedText}
+                  onChange={(e) => setPastedText(e.target.value)}
+                  placeholder={`Contoh format data yang disalin terus dari idMe:\n1\t13/08/2026\tAHMAD HARRAZ RUSYAIDI BIN NOR HAMIZAN\tMASALAH PENGANGKUTAN\n2\t16/01/2026\tAHMAD HARRAZ RUSYAIDI BIN NOR HAMIZAN\tMAKLUMAN IBU BAPA PENJAGA\n3\t10/04/2026\tAHMAD HARRAZ RUSYAIDI BIN NOR HAMIZAN\tMAKLUMAN IBU BAPA PENJAGA\n4\t07/07/2026\tAHMAD HARRAZ RUSYAIDI BIN NOR HAMIZAN\tTEMUJANJI HOSPITAL/KLINIK\n5\t26/06/2026\tAHMAD HARRAZ RUSYAIDI BIN NOR HAMIZAN\tMAKLUMAN IBU BAPA PENJAGA\n6\t18/05/2026\tAHMAD HARRAZ RUSYAIDI BIN NOR HAMIZAN\tMAKLUMAN IBU BAPA PENJAGA`}
+                  className="w-full font-mono text-xs p-3.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white placeholder:text-slate-400 leading-relaxed resize-y min-h-[160px]"
+                />
+                {pastedText && (
+                  <div className="absolute right-3 bottom-3 px-2 py-0.5 rounded bg-slate-100 text-[10px] text-slate-500 font-mono">
+                    {pastedText.split(/\r?\n/).filter((l) => l.trim().length > 0).length} baris dikesan
+                  </div>
+                )}
+              </div>
+
+              {/* Butang Tindakan */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+                <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                  <span>💡</span>
+                  <span>Format disokong: <strong>Bil, Tarikh, Nama Murid, Sebab</strong> (Salinan Tab daripada jadual idMe).</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handlePreviewPastedText}
+                    disabled={isParsing || isDirectImporting || !pastedText.trim()}
+                    className="px-4 py-2.5 text-xs font-semibold rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 disabled:opacity-50 transition flex items-center justify-center gap-1.5"
+                  >
+                    <FileText className="w-4 h-4 text-slate-500" />
+                    <span>{isParsing ? 'Menganalisis...' : 'Semak Pratonton Dahulu'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDirectPasteImport}
+                    disabled={isParsing || isDirectImporting || !pastedText.trim()}
+                    className="px-5 py-2.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs disabled:opacity-50 transition flex items-center justify-center gap-2"
+                  >
+                    <Zap className="w-4 h-4 fill-white" />
+                    <span>{isDirectImporting ? 'Sedang Masuk Ke Sistem...' : 'Terus Masuk Dalam Sistem'}</span>
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            onChange={handleFileChange}
-            className="hidden"
-          />
+          )}
+
+          {/* KAEDAH 2: MUAT NAIK FAIL EXCEL / CSV */}
+          {importMode === 'upload' && (
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-slate-300 hover:border-emerald-500 bg-white hover:bg-emerald-50/20 rounded-2xl p-10 text-center cursor-pointer transition flex flex-col items-center justify-center gap-3"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs">
+                <Upload className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">
+                  {isParsing ? 'Sedang Menganalisis Fail...' : 'Klik atau Seret Fail Ke Sini'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Menyokong fail Excel (.xlsx, .xls) dan CSV mengikut format kehadiran sekolah (idMe, APDM, atau tersuai).
+                </p>
+                <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 text-[11px] font-medium border border-emerald-200">
+                  <span>📅</span>
+                  <span>Pengecaman Tarikh Pintar: <strong>DD/MM/YYYY</strong>, <strong>DD-MM-YYYY</strong>, <strong>DD.MM.YYYY</strong>, nombor siri Excel, atau nama bulan (cth: 16 Sep 2026).</span>
+                </div>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </div>
+          )}
         </div>
       )}
 
