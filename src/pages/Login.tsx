@@ -490,11 +490,10 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
                       ))}
                       {availableClasses.length === 0 && (
                         <>
-                          <option value="1 AF">1 AF</option>
+                          <option value="3 AA">3 AA</option>
                           <option value="1 AM">1 AM</option>
                           <option value="1 AK">1 AK</option>
                           <option value="2 AA">2 AA</option>
-                          <option value="3 AA">3 AA</option>
                           <option value="3 BB">3 BB</option>
                           <option value="4 IS">4 IS</option>
                           <option value="5 IDR">5 IDR</option>

@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/common/Toast';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar, AppView } from './components/layout/Sidebar';
+import { MobileBottomNav } from './components/layout/MobileBottomNav';
 import { Footer } from './components/layout/Footer';
 import { Login } from './pages/Login';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
@@ -36,6 +37,7 @@ const MainLayout: React.FC = () => {
   const { user, role, isLoading: authLoading } = useAuth();
 
   const [currentView, setCurrentView] = useState<AppView>('admin_dashboard');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [teachers, setTeachers] = useState<User[]>([]);
@@ -117,8 +119,8 @@ const MainLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-800 antialiased font-sans">
-      {/* Top Navigation */}
-      <Navbar />
+      {/* Top Navigation with Mobile Menu Trigger */}
+      <Navbar onOpenMobileMenu={() => setIsMobileMenuOpen(true)} />
 
       {/* Main Workspace Layout */}
       <div className="flex-1 flex max-w-7xl w-full mx-auto">
@@ -126,9 +128,11 @@ const MainLayout: React.FC = () => {
           currentView={currentView}
           onSelectView={(v) => setCurrentView(v)}
           pendingWarningsCount={pendingWarningsCount}
+          isMobileOpen={isMobileMenuOpen}
+          onCloseMobile={() => setIsMobileMenuOpen(false)}
         />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+        <main className="flex-1 p-3.5 sm:p-5 lg:p-8 pb-24 lg:pb-8 overflow-x-hidden min-w-0">
           {/* Admin Views */}
           {role === 'admin' && (
             <>
@@ -272,6 +276,14 @@ const MainLayout: React.FC = () => {
 
       {/* Footer with Trademark */}
       <Footer />
+
+      {/* Mobile Bottom Navigation for Quick Thumb Access (Smart per Role) */}
+      <MobileBottomNav
+        currentView={currentView}
+        onSelectView={(v) => setCurrentView(v)}
+        onOpenMenu={() => setIsMobileMenuOpen(true)}
+        pendingWarningsCount={pendingWarningsCount}
+      />
     </div>
   );
 };

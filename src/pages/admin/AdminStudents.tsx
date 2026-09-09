@@ -183,9 +183,95 @@ export const AdminStudents: React.FC<AdminStudentsProps> = ({
         </div>
       </div>
 
-      {/* Jadual Senarai Murid */}
+      {/* Senarai Murid: Responsif Mobile Cards + Desktop Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile View */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {filteredStudents.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 text-xs">
+              Tiada murid dijumpai.
+            </div>
+          ) : (
+            filteredStudents.map((student, idx) => {
+              const status = studentStatuses.find((s) => s.student.id === student.id);
+              const totalAbsences = status?.totalAbsences || 0;
+              const doctorLetters = status?.doctorLetterCount || 0;
+              const eligible = status?.eligibleAbsences || 0;
+
+              return (
+                <div key={student.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5">
+                      <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 font-mono text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <div className="font-bold text-slate-900 text-sm">{student.name}</div>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                          <span className="font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                            {student.className}
+                          </span>
+                          <span>{student.studentNumber || 'No: ' + student.id.substring(0, 8)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      {status ? <StatusBadge status={status.status} /> : <StatusBadge variant="normal" />}
+                    </div>
+                  </div>
+
+                  {/* Stat pills */}
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-200/80">
+                      <div className="text-[10px] text-slate-500">Jumlah TH</div>
+                      <div className="font-bold text-slate-800">{totalAbsences}h</div>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-emerald-50/60 border border-emerald-200/60">
+                      <div className="text-[10px] text-emerald-700">Surat Dr</div>
+                      <div className="font-bold text-emerald-700">{doctorLetters}h</div>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-rose-50 border border-rose-200">
+                      <div className="text-[10px] text-rose-600 font-medium">Kiraan</div>
+                      <div className="font-black text-rose-700">{eligible}h</div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => status && setInspectingStatus(status)}
+                      className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center justify-center gap-1.5 transition touch-manipulation"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>Profil & Surat</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(student)}
+                      title="Edit Murid"
+                      className="p-2 rounded-xl text-slate-600 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 transition touch-manipulation"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      id={`btn-delete-student-m-${student.id}`}
+                      onClick={() => setStudentToDelete(student)}
+                      title="Padam Murid"
+                      className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition touch-manipulation"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop / Tablet Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">

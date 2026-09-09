@@ -78,9 +78,66 @@ export const TeacherAttendance: React.FC<TeacherAttendanceProps> = ({
         </div>
       </div>
 
-      {/* Jadual */}
+      {/* Rekod Kehadiran: Responsif Mobile Cards + Desktop Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile View */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {myAttendance.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 text-xs">
+              Tiada rekod ketidakhadiran ditemui bagi kelas ini.
+            </div>
+          ) : (
+            myAttendance.map((rec, idx) => (
+              <div
+                key={rec.id}
+                className={`p-4 space-y-2 transition ${
+                  !rec.countsTowardsWarning ? 'bg-emerald-50/20' : ''
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 font-mono text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                      {idx + 1}
+                    </span>
+                    <div>
+                      <div className="font-bold text-slate-900 text-sm">{rec.studentName}</div>
+                      <div className="text-[11px] text-slate-500 font-medium">
+                        {formatDateDisplay(rec.date)}
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    {rec.countsTowardsWarning ? (
+                      <span className="inline-flex items-center gap-1 font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded text-[10px]">
+                        🔴 Dikira
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[10px]">
+                        🟢 Surat Doktor
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-1 flex items-center gap-2 text-xs">
+                  <span className="text-[11px] text-slate-400 font-medium">Sebab:</span>
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
+                      rec.reason === 'TIADA MAKLUMAN'
+                        ? 'bg-slate-100 text-slate-600'
+                        : 'bg-indigo-50 text-indigo-800 border border-indigo-100 font-semibold'
+                    }`}
+                  >
+                    {rec.reason}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop / Tablet Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">

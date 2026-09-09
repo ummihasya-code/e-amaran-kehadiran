@@ -154,9 +154,140 @@ export const AdminWarnings: React.FC<AdminWarningsProps> = ({
         </div>
       </div>
 
-      {/* Jadual Tindakan Surat Amaran */}
+      {/* Pengurusan Surat Amaran: Responsif Mobile Cards + Desktop Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile View */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {filteredStatuses.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 text-xs">
+              <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
+              <span>Tiada rekod murid dijumpai bagi kriteria tapisan ini.</span>
+            </div>
+          ) : (
+            filteredStatuses.map((item) => {
+              const isExpulsion = item.status === 'expulsion_needed';
+              const needsAction =
+                item.status === 'warning1_needed' ||
+                item.status === 'warning2_needed' ||
+                item.status === 'warning3_needed';
+
+              const currentNeededType: WarningType =
+                item.status === 'warning1_needed'
+                  ? 'warning1'
+                  : item.status === 'warning2_needed'
+                  ? 'warning2'
+                  : 'warning3';
+
+              return (
+                <div
+                  key={item.student.id}
+                  className={`p-4 space-y-3 transition ${
+                    isExpulsion ? 'bg-purple-50/30' : needsAction ? 'bg-rose-50/25' : ''
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-slate-900 text-sm">{item.student.name}</div>
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                        <span className="font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                          {item.student.className}
+                        </span>
+                        <span>{item.student.studentNumber || 'ID: ' + item.student.id.substring(0, 8)}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <StatusBadge status={item.status} />
+                    </div>
+                  </div>
+
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-200/80">
+                      <div className="text-[10px] text-slate-500">Jumlah TH</div>
+                      <div className="font-bold text-slate-800">{item.totalAbsences}h</div>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-emerald-50/60 border border-emerald-200/60">
+                      <div className="text-[10px] text-emerald-700">Surat Dr</div>
+                      <div className="font-bold text-emerald-700">{item.doctorLetterCount}h</div>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-rose-50 border border-rose-200">
+                      <div className="text-[10px] text-rose-600 font-medium">Kiraan Amaran</div>
+                      <div className="font-black text-rose-700">{item.eligibleAbsences}h</div>
+                    </div>
+                  </div>
+
+                  {/* Rekod Surat A1, A2, A3 */}
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                    <span className="text-slate-500 text-[11px] font-medium">Status Surat:</span>
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <span
+                        className={`px-2 py-0.5 rounded-md font-bold ${
+                          item.warning1 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-400'
+                        }`}
+                      >
+                        A1: {item.warning1 ? 'Ya' : 'Belum'}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-md font-bold ${
+                          item.warning2 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-400'
+                        }`}
+                      >
+                        A2: {item.warning2 ? 'Ya' : 'Belum'}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-md font-bold ${
+                          item.warning3 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-400'
+                        }`}
+                      >
+                        A3: {item.warning3 ? 'Ya' : 'Belum'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 pt-1">
+                    {needsAction && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRecordingTarget({
+                            status: item,
+                            type: currentNeededType,
+                          })
+                        }
+                        className="flex-1 py-2 px-3 text-xs font-bold rounded-xl text-white bg-rose-600 hover:bg-rose-700 shadow-2xs transition flex items-center justify-center gap-1.5 touch-manipulation"
+                      >
+                        <FileCheck2 className="w-3.5 h-3.5" />
+                        <span>REKOD SURAT</span>
+                      </button>
+                    )}
+                    {isExpulsion && (
+                      <button
+                        type="button"
+                        onClick={() => setInspectingStatus(item)}
+                        className="flex-1 py-2 px-3 text-xs font-bold rounded-xl text-white bg-purple-700 hover:bg-purple-800 shadow-2xs transition flex items-center justify-center gap-1.5 touch-manipulation"
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5" />
+                        <span>KES DISIPLIN</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setInspectingStatus(item)}
+                      className="py-2 px-3 text-xs font-semibold rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs transition flex items-center justify-center gap-1 touch-manipulation"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Profil</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop / Tablet Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
