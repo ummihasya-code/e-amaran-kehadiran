@@ -82,8 +82,13 @@ service cloud.firestore {
 
     // SETTINGS COLLECTION
     match /settings/{settingId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow read: if true;
+      allow write: if isAdmin() || isSignedIn();
+    }
+
+    // CONNECTION TEST
+    match /test/{docId} {
+      allow read: if true;
     }
   }
 }

@@ -95,6 +95,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
+        // Segerak data asas ke Firestore jika belum ada
+        dataService.ensureFirestoreSeeded().catch(() => {});
+
         const email = fbUser.email || '';
         const isUmmiOrAdmin = email === 'ummihasya@gmail.com' || email.toLowerCase().includes('admin');
 
@@ -135,6 +138,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(true);
       const res = await signInWithPopup(auth, googleProvider);
       const fbUser = res.user;
+      await dataService.ensureFirestoreSeeded().catch(() => {});
       const email = fbUser.email || '';
       const isUmmiOrAdmin = email === 'ummihasya@gmail.com' || email.toLowerCase().includes('admin');
 

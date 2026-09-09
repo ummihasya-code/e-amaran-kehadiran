@@ -99,45 +99,41 @@ class DataService {
       setLocal('attendance', attendance);
     }
 
-    // Try syncing initial documents to Firestore in background
-    this.syncToFirestoreIfEmpty(users, classes, students, attendance, settings).catch((err) => {
-      console.warn('Firestore initial sync deferred: ', err);
-    });
-
     this.initialized = true;
   }
 
-  private async syncToFirestoreIfEmpty(
-    users: User[],
-    classes: SchoolClass[],
-    students: Student[],
-    attendance: AttendanceRecord[],
-    settings: AttendanceSettings
-  ) {
+  async ensureFirestoreSeeded(): Promise<void> {
     if (!auth.currentUser) {
       return;
     }
     try {
       const snap = await getDocs(collection(db, 'classes'));
       if (snap.empty) {
+        const users = getLocal<User[]>('users', INITIAL_USERS);
+        const classes = getLocal<SchoolClass[]>('classes', INITIAL_CLASSES);
+        const students = getLocal<Student[]>('students', INITIAL_STUDENTS);
+        const attendance = getLocal<AttendanceRecord[]>('attendance', generateInitialAttendance());
+        const settings = getLocal<AttendanceSettings>('settings', DEFAULT_SETTINGS);
+
         const batch = writeBatch(db);
         for (const c of classes) {
-          batch.set(doc(db, 'classes', c.id), c);
+          batch.set(doc(db, 'classes', c.id), sanitizeForFirestore(c), { merge: true });
         }
         for (const u of users) {
-          batch.set(doc(db, 'users', u.id), u);
+          batch.set(doc(db, 'users', u.id), sanitizeForFirestore(u), { merge: true });
         }
         for (const s of students) {
-          batch.set(doc(db, 'students', s.id), s);
+          batch.set(doc(db, 'students', s.id), sanitizeForFirestore(s), { merge: true });
         }
         for (const a of attendance.slice(0, 50)) {
-          batch.set(doc(db, 'attendance', a.id), a);
+          batch.set(doc(db, 'attendance', a.id), sanitizeForFirestore(a), { merge: true });
         }
-        batch.set(doc(db, 'settings', settings.id), settings);
+        batch.set(doc(db, 'settings', settings.id || 'rules'), sanitizeForFirestore(settings), { merge: true });
         await batch.commit();
+        console.log('Firebase Firestore: data permulaan berjaya disegerakkan.');
       }
     } catch (e) {
-      // Ignored if offline or rules deny initial anonymous sync
+      console.warn('ensureFirestoreSeeded notice: ', e);
     }
   }
 
@@ -178,6 +174,9 @@ class DataService {
   }
 
   async getAuditLogs(): Promise<AuditLog[]> {
+    if (!auth.currentUser) {
+      return getLocal<AuditLog[]>('auditLogs', []);
+    }
     try {
       const q = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'));
       const snap = await getDocs(q);
@@ -194,6 +193,12 @@ class DataService {
 
   // STUDENTS
   async getStudents(includeInactive: boolean = false): Promise<Student[]> {
+    if (!auth.currentUser) {
+      const list = getLocal<Student[]>('students', INITIAL_STUDENTS);
+      return includeInactive
+        ? list
+        : list.filter((s) => !s.isDeleted && s.status !== 'pindah' && s.status !== 'dibuang');
+    }
     try {
       const snap = await getDocs(collection(db, 'students'));
       if (!snap.empty) {
@@ -389,6 +394,10 @@ class DataService {
 
   // CLASSES
   async getClasses(): Promise<SchoolClass[]> {
+    if (!auth.currentUser) {
+      const localList = getLocal<SchoolClass[]>('classes', INITIAL_CLASSES);
+      return sortSchoolClasses(localList);
+    }
     try {
       const snap = await getDocs(collection(db, 'classes'));
       if (!snap.empty) {
@@ -586,6 +595,9 @@ class DataService {
 
   // USERS
   async getUsers(): Promise<User[]> {
+    if (!auth.currentUser) {
+      return getLocal<User[]>('users', INITIAL_USERS);
+    }
     try {
       const snap = await getDocs(collection(db, 'users'));
       if (!snap.empty) {
@@ -711,6 +723,10 @@ class DataService {
   }
 
   async getAttendance(): Promise<AttendanceRecord[]> {
+    if (!auth.currentUser) {
+      const local = getLocal<AttendanceRecord[]>('attendance', generateInitialAttendance());
+      return this.deduplicateAttendance(local);
+    }
     try {
       const snap = await getDocs(collection(db, 'attendance'));
       if (!snap.empty) {
@@ -983,6 +999,9 @@ class DataService {
 
   // WARNING LETTERS
   async getWarningLetters(): Promise<WarningLetter[]> {
+    if (!auth.currentUser) {
+      return getLocal<WarningLetter[]>('warningLetters', []);
+    }
     try {
       const snap = await getDocs(collection(db, 'warningLetters'));
       if (!snap.empty) {
