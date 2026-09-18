@@ -25,6 +25,13 @@ export interface Student {
   updatedAt?: string;
 }
 
+export interface ArchivedStudentItem {
+  student: Student;
+  deletedAt?: string;
+  deletedReason?: string;
+  source: 'database' | 'audit_log';
+}
+
 export interface SchoolClass {
   id: string;
   className: string;

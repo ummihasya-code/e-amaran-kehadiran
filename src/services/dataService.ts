@@ -12,6 +12,7 @@ import {
 import { db, auth } from '../firebase/config';
 import { handleFirestoreError, OperationType } from '../firebase/firestoreErrors';
 import {
+  ArchivedStudentItem,
   AttendanceRecord,
   AttendanceSettings,
   AuditLog,
@@ -276,47 +277,45 @@ class DataService {
         ? 'Dibuang Sekolah'
         : 'Padam Rekod Murid');
 
-    if (action === 'delete') {
-      const updated = list.filter((s) => s.id !== studentId);
-      setLocal('students', updated);
-      try {
-        await deleteDoc(doc(db, 'students', studentId));
-      } catch (e) {
-        if (auth.currentUser) {
-          handleFirestoreError(e, OperationType.DELETE, `students/${studentId}`, auth.currentUser);
-        } else {
-          console.warn('Firestore delete warning for students: fallback to local cache:', e);
-        }
+    // Soft-delete supaya data murid tidak hilang selama-lamanya dan boleh dipulihkan jika tersalah padam
+    const studentStatus = action === 'pindah' ? 'pindah' : 'dibuang';
+    const updated = list.map((s) => {
+      if (s.id === studentId) {
+        return {
+          ...s,
+          status: studentStatus as 'pindah' | 'dibuang',
+          isDeleted: true,
+          deletedAt: new Date().toISOString(),
+          deletedReason: reasonText,
+        };
       }
-    } else {
-      // Tandakan murid sebagai 'pindah' atau 'dibuang' (soft delete dengan status)
-      const updated = list.map((s) => {
-        if (s.id === studentId) {
-          return {
-            ...s,
-            status: action,
+      return s;
+    });
+    setLocal('students', updated);
+
+    try {
+      const studentPayload = targetStudent
+        ? {
+            ...targetStudent,
+            status: studentStatus,
+            isDeleted: true,
+            deletedAt: new Date().toISOString(),
+            deletedReason: reasonText,
+          }
+        : {
+            id: studentId,
+            status: studentStatus,
             isDeleted: true,
             deletedAt: new Date().toISOString(),
             deletedReason: reasonText,
           };
-        }
-        return s;
-      });
-      setLocal('students', updated);
 
-      try {
-        await updateDoc(doc(db, 'students', studentId), {
-          status: action,
-          isDeleted: true,
-          deletedAt: new Date().toISOString(),
-          deletedReason: reasonText,
-        });
-      } catch (e) {
-        if (auth.currentUser) {
-          handleFirestoreError(e, OperationType.UPDATE, `students/${studentId}`, auth.currentUser);
-        } else {
-          console.warn('Firestore update warning for student status: fallback to local cache:', e);
-        }
+      await setDoc(doc(db, 'students', studentId), sanitizeForFirestore(studentPayload), { merge: true });
+    } catch (e) {
+      if (auth.currentUser) {
+        handleFirestoreError(e, OperationType.UPDATE, `students/${studentId}`, auth.currentUser);
+      } else {
+        console.warn('Firestore update warning for student status: fallback to local cache:', e);
       }
     }
 
@@ -387,6 +386,259 @@ class DataService {
         tindakan: action,
         sebab: reasonText,
         rekodKehadiranDinyahaktif: affectedAttendance.length,
+      },
+      user
+    );
+  }
+
+  // PULIHKAN MURID (RESTORE ACCIDENTALLY DELETED OR TRANSFERRED STUDENT)
+  async restoreStudent(
+    studentId: string,
+    fallbackData?: Partial<Student>,
+    user?: { id: string; name?: string }
+  ): Promise<Student> {
+    const list = getLocal<Student[]>('students', []);
+    let targetStudent = list.find((s) => s.id === studentId);
+
+    if (!targetStudent && fallbackData?.name) {
+      targetStudent = {
+        id: studentId,
+        name: fallbackData.name,
+        className: fallbackData.className || '3 AA',
+        classId:
+          fallbackData.classId ||
+          `class_${(fallbackData.className || '3 AA').toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+        studentNumber: fallbackData.studentNumber,
+        createdAt: new Date().toISOString(),
+      };
+      list.push(targetStudent);
+    }
+
+    if (!targetStudent) {
+      throw new Error(`Maklumat murid ID ${studentId} tidak dijumpai untuk dipulihkan.`);
+    }
+
+    const restoredStudent: Student = {
+      ...targetStudent,
+      ...(fallbackData || {}),
+      status: 'active',
+      isDeleted: false,
+      deletedAt: undefined,
+      deletedReason: undefined,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const updatedStudents = list.map((s) => (s.id === studentId ? restoredStudent : s));
+    if (!list.some((s) => s.id === studentId)) {
+      updatedStudents.push(restoredStudent);
+    }
+    setLocal('students', updatedStudents);
+
+    // Kemaskini dalam Firestore
+    try {
+      await setDoc(doc(db, 'students', studentId), sanitizeForFirestore(restoredStudent), { merge: true });
+    } catch (e) {
+      if (auth.currentUser) {
+        handleFirestoreError(e, OperationType.WRITE, `students/${studentId}`, auth.currentUser);
+      } else {
+        console.warn('Firestore restore student fallback to local cache:', e);
+      }
+    }
+
+    // Keluarkan daripada senarai murid disingkirkan supaya import masa hadapan tidak menyekat murid ini
+    const removedSet = new Set(getLocal<string[]>('removed_students_registry', []));
+    removedSet.delete(studentId);
+    if (restoredStudent.name) {
+      removedSet.delete(normalizeStudentName(restoredStudent.name));
+    }
+    if (restoredStudent.studentNumber) {
+      removedSet.delete(restoredStudent.studentNumber.trim().toUpperCase());
+    }
+    setLocal('removed_students_registry', Array.from(removedSet));
+
+    // Pulihkan semula rekod kehadiran murid jika ada
+    const attendanceList = getLocal<AttendanceRecord[]>('attendance', []);
+    const studentNormName = normalizeStudentName(restoredStudent.name);
+    const affectedAttendance = attendanceList.filter(
+      (a) =>
+        a.studentId === studentId ||
+        (studentNormName && a.studentName && normalizeStudentName(a.studentName) === studentNormName)
+    );
+
+    if (affectedAttendance.length > 0) {
+      const updatedAttendance = attendanceList.map((a) => {
+        if (
+          a.studentId === studentId ||
+          (studentNormName && a.studentName && normalizeStudentName(a.studentName) === studentNormName)
+        ) {
+          const { isDeleted, deletedAt, deletedBy, deleteReason, ...rest } = a;
+          return {
+            ...rest,
+            isDeleted: false,
+            updatedAt: new Date().toISOString(),
+            updatedBy: user?.name || 'Sistem (Pulihkan)',
+          } as AttendanceRecord;
+        }
+        return a;
+      });
+      setLocal('attendance', updatedAttendance);
+
+      for (const rec of affectedAttendance) {
+        try {
+          await updateDoc(doc(db, 'attendance', rec.id), {
+            isDeleted: false,
+            deletedAt: null,
+            deletedBy: null,
+            deleteReason: null,
+            updatedAt: new Date().toISOString(),
+            updatedBy: user?.name || 'Sistem (Pulihkan)',
+          });
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    await this.addAuditLog(
+      'Pulihkan Murid (Restore)',
+      'student',
+      studentId,
+      {
+        name: restoredStudent.name,
+        className: restoredStudent.className,
+        rekodKehadiranDipulihkan: affectedAttendance.length,
+      },
+      user
+    );
+
+    return restoredStudent;
+  }
+
+  // DAPATKAN SENARAI MURID DALAM ARKIB (PINDAH / DIBUANG / TERPADAM)
+  async getArchivedStudents(): Promise<ArchivedStudentItem[]> {
+    const allStudents = await this.getStudents(true);
+    const archivedMap = new Map<string, ArchivedStudentItem>();
+
+    // 1. Rekod tidak aktif dari pangkalan data murid
+    for (const s of allStudents) {
+      if (s.isDeleted || s.status === 'pindah' || s.status === 'dibuang') {
+        archivedMap.set(s.id, {
+          student: s,
+          deletedAt: s.deletedAt,
+          deletedReason:
+            s.deletedReason ||
+            (s.status === 'pindah'
+              ? 'Pindah Sekolah'
+              : s.status === 'dibuang'
+              ? 'Dibuang Sekolah'
+              : 'Dipadam Rekod'),
+          source: 'database',
+        });
+      }
+    }
+
+    // 2. Semak jejak audit (Audit Trail) jika ada murid yang dipadam sebelum ini
+    try {
+      const logs = await this.getAuditLogs();
+      const activeStudentIds = new Set(
+        allStudents
+          .filter((s) => !s.isDeleted && s.status !== 'pindah' && s.status !== 'dibuang')
+          .map((s) => s.id)
+      );
+
+      for (const log of logs) {
+        if (
+          log.targetType === 'student' &&
+          (log.action.includes('Padam') || log.action.includes('Pindah') || log.action.includes('Buang'))
+        ) {
+          const studentId = log.targetId;
+          if (!activeStudentIds.has(studentId) && !archivedMap.has(studentId) && log.metadata?.name) {
+            archivedMap.set(studentId, {
+              student: {
+                id: studentId,
+                name: log.metadata.name,
+                className: log.metadata.className || '3 AA',
+                classId: `class_${(log.metadata.className || '3 AA').toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+                status: (log.metadata.tindakan as any) || 'pindah',
+                isDeleted: true,
+                deletedAt: log.timestamp,
+                deletedReason: log.metadata.sebab || log.action,
+                createdAt: log.timestamp,
+              },
+              deletedAt: log.timestamp,
+              deletedReason: log.metadata.sebab || log.action,
+              source: 'audit_log',
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Gagal membaca log jejak audit arkib murid:', e);
+    }
+
+    // 3. Semak rekod kehadiran yang telah dinyahaktifkan
+    try {
+      const attendance = await this.getAttendance();
+      const activeStudentNames = new Set(
+        allStudents
+          .filter((s) => !s.isDeleted && s.status !== 'pindah' && s.status !== 'dibuang')
+          .map((s) => normalizeStudentName(s.name))
+      );
+
+      for (const a of attendance) {
+        if (a.isDeleted && a.studentName && !activeStudentNames.has(normalizeStudentName(a.studentName))) {
+          if (!archivedMap.has(a.studentId)) {
+            archivedMap.set(a.studentId, {
+              student: {
+                id: a.studentId,
+                name: a.studentName,
+                className: a.className || '3 AA',
+                classId: a.classId || 'class_3aa',
+                status: 'pindah',
+                isDeleted: true,
+                deletedAt: a.deletedAt,
+                deletedReason: a.deleteReason || 'Pindah Sekolah',
+                createdAt: a.createdAt,
+              },
+              deletedAt: a.deletedAt,
+              deletedReason: a.deleteReason || 'Pindah Sekolah',
+              source: 'database',
+            });
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // Susun mengikut tarikh terkini dipadam
+    return Array.from(archivedMap.values()).sort((a, b) => {
+      const timeA = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
+      const timeB = b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
+      return timeB - timeA;
+    });
+  }
+
+  // HAPUS KEKAL REKOD MURID DARI ARKIB (PERMANENT PURGE)
+  async purgeStudent(studentId: string, user?: { id: string; name?: string }): Promise<void> {
+    const list = getLocal<Student[]>('students', []);
+    const target = list.find((s) => s.id === studentId);
+    const updated = list.filter((s) => s.id !== studentId);
+    setLocal('students', updated);
+
+    try {
+      await deleteDoc(doc(db, 'students', studentId));
+    } catch {
+      // ignore
+    }
+
+    await this.addAuditLog(
+      'Hapus Kekal Rekod Murid',
+      'student',
+      studentId,
+      {
+        name: target?.name || studentId,
+        className: target?.className,
       },
       user
     );

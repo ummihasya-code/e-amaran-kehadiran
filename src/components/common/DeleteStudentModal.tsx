@@ -200,11 +200,11 @@ export const DeleteStudentModal: React.FC<DeleteStudentModalProps> = ({
           />
         </div>
 
-        {/* Notis Jaminan Perlindungan Import Semula */}
+        {/* Notis Jaminan Perlindungan Import Semula & Pemulihan */}
         <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-start gap-2.5">
           <AlertTriangle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
           <div className="leading-relaxed">
-            <span className="font-bold">Jaminan Perlindungan Data:</span> Murid ini akan disenaraikan ke dalam rekod perlindungan sistem. Sekiranya fail Excel atau APDM lama diimport semula pada masa akan datang, murid ini <span className="font-semibold underline">tidak akan dimasukkan atau direkodkan semula</span>.
+            <span className="font-bold">Jaminan Keselamatan Data:</span> Rekod murid ini akan diarkibkan dengan selamat dan tidak akan dipadam kekal serta-merta. Sekiranya anda <span className="font-semibold underline">tersalah padam</span>, anda boleh memulihkan (restore) murid ini pada bila-bila masa melalui tab <strong>"Arkib & Pulihkan"</strong> di halaman Pengurusan Murid.
           </div>
         </div>
 
