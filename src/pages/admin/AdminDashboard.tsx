@@ -10,6 +10,7 @@ import {
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { StudentProfileModal } from '../../components/attendance/StudentProfileModal';
 import { AddAttendanceModal } from '../../components/attendance/AddAttendanceModal';
+import { DataExportModal } from '../../components/common/DataExportModal';
 import { sortSchoolClasses } from '../../utils/classOrder';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -34,6 +35,7 @@ import {
   AlertCircle,
   Eye,
   CheckCircle2,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -61,6 +63,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const userName = user?.name ? user.name.toUpperCase() : 'PENTADBIR';
   const [selectedStudentStatus, setSelectedStudentStatus] = useState<StudentWarningStatus | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
 
   // Kira statistik sekolah
   const activeAttendance = attendance.filter((a) => !a.isDeleted);
@@ -131,7 +134,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            id="btn-open-export-dashboard"
+            onClick={() => setIsExportModalOpen(true)}
+            className="px-3.5 py-2 text-xs font-bold rounded-xl text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 shadow-2xs flex items-center gap-1.5 transition"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span>Eksport Data (CSV / Sheets)</span>
+          </button>
           <button
             onClick={() => onNavigate('admin_import')}
             className="px-3.5 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-xs flex items-center gap-1.5 transition"
@@ -405,6 +417,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onDataChanged={onRefreshData}
         />
       )}
+
+      {/* Modal Eksport Data (CSV & Google Sheets) */}
+      <DataExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        students={students}
+        studentStatuses={studentStatuses}
+        attendance={attendance}
+        warnings={warnings}
+        classes={classes}
+        initialDataset="student_warnings_master"
+      />
     </div>
   );
 };

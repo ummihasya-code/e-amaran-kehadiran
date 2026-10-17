@@ -163,6 +163,8 @@ const MainLayout: React.FC = () => {
                   attendance={attendance}
                   students={students}
                   classes={classes}
+                  studentStatuses={studentStatuses}
+                  warnings={warnings}
                   onRefreshData={loadAllData}
                 />
               )}
@@ -173,6 +175,8 @@ const MainLayout: React.FC = () => {
                   attendance={attendance}
                   classes={classes}
                   settings={settings}
+                  students={students}
+                  warnings={warnings}
                   onRefreshData={loadAllData}
                 />
               )}
@@ -183,6 +187,7 @@ const MainLayout: React.FC = () => {
                   classes={classes}
                   attendance={attendance}
                   studentStatuses={studentStatuses}
+                  warnings={warnings}
                   onRefreshData={loadAllData}
                   onNavigate={(v) => setCurrentView(v as AppView)}
                 />
@@ -258,6 +263,9 @@ const MainLayout: React.FC = () => {
                   studentStatuses={studentStatuses}
                   attendance={attendance}
                   settings={settings}
+                  students={students}
+                  warnings={warnings}
+                  classes={classes}
                   onRefreshData={loadAllData}
                 />
               )}
@@ -267,6 +275,8 @@ const MainLayout: React.FC = () => {
                   students={students}
                   attendance={attendance}
                   studentStatuses={studentStatuses}
+                  warnings={warnings}
+                  classes={classes}
                 />
               )}
             </>

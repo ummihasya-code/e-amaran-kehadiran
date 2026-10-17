@@ -1,6 +1,13 @@
-import React from 'react';
-import { AttendanceRecord, Student, StudentWarningStatus } from '../../types';
+import React, { useState } from 'react';
+import {
+  AttendanceRecord,
+  SchoolClass,
+  Student,
+  StudentWarningStatus,
+  WarningLetter,
+} from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { DataExportModal } from '../../components/common/DataExportModal';
 import {
   PieChart,
   Pie,
@@ -13,12 +20,14 @@ import {
   YAxis,
   CartesianGrid,
 } from 'recharts';
-import { BarChart3, Stethoscope, AlertTriangle, Users } from 'lucide-react';
+import { BarChart3, Stethoscope, AlertTriangle, Users, FileSpreadsheet } from 'lucide-react';
 
 interface TeacherReportsProps {
   students: Student[];
   attendance: AttendanceRecord[];
   studentStatuses: StudentWarningStatus[];
+  warnings?: WarningLetter[];
+  classes?: SchoolClass[];
 }
 
 const COLORS = ['#059669', '#3b82f6', '#f59e0b', '#e11d48', '#8b5cf6'];
@@ -27,9 +36,12 @@ export const TeacherReports: React.FC<TeacherReportsProps> = ({
   students,
   attendance,
   studentStatuses,
+  warnings = [],
+  classes = [],
 }) => {
   const { user } = useAuth();
   const assignedClass = user?.assignedClasses[0] || '3 AA';
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
 
   const myStudents = students.filter((s) => s.className === assignedClass);
   const myAttendance = attendance.filter(
@@ -70,16 +82,28 @@ export const TeacherReports: React.FC<TeacherReportsProps> = ({
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold mb-1">
-          <span>Kelas {assignedClass}</span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold mb-1">
+            <span>Kelas {assignedClass}</span>
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+            Laporan Analitik Kelas {assignedClass}
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Statistik kehadiran dan profil amaran bagi murid di bawah jagaan anda
+          </p>
         </div>
-        <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-          Laporan Analitik Kelas {assignedClass}
-        </h2>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Statistik kehadiran dan profil amaran bagi murid di bawah jagaan anda
-        </p>
+
+        <button
+          type="button"
+          id="btn-open-export-teacher-reports"
+          onClick={() => setIsExportModalOpen(true)}
+          className="px-3.5 py-2 text-xs font-bold rounded-xl text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 shadow-2xs flex items-center gap-1.5 transition self-start sm:self-auto"
+        >
+          <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+          <span>Eksport (CSV / Sheets)</span>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -137,6 +161,20 @@ export const TeacherReports: React.FC<TeacherReportsProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Modal Eksport Data Kelas */}
+      <DataExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        students={students}
+        studentStatuses={studentStatuses}
+        attendance={attendance}
+        warnings={warnings}
+        classes={classes}
+        initialDataset="student_warnings_master"
+        defaultClass={assignedClass}
+        lockClass={true}
+      />
     </div>
   );
 };

@@ -5,6 +5,15 @@ import { formatDateDisplay } from '../../utils/dateUtils';
 import { normalizeStudentName, normalizeClassName } from '../../utils/studentMatcher';
 import { RecordWarningModal } from './RecordWarningModal';
 import {
+  buildSingleStudentExportData,
+  generateCsvString,
+  generateTsvString,
+  downloadCsvFile,
+  copyToClipboard,
+  openNewGoogleSheet,
+} from '../../utils/exportUtils';
+import { useToast } from '../common/Toast';
+import {
   Calendar,
   FileCheck2,
   AlertCircle,
@@ -18,6 +27,9 @@ import {
   CheckCircle2,
   ShieldAlert,
   Trash2,
+  FileSpreadsheet,
+  Download,
+  Copy,
 } from 'lucide-react';
 import { isDateAfter } from '../../services/warningEngine';
 import { DeleteStudentModal } from '../common/DeleteStudentModal';
@@ -37,6 +49,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   attendanceRecords,
   onDataChanged,
 }) => {
+  const { showToast } = useToast();
   const [selectedWarningType, setSelectedWarningType] = useState<WarningType | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
 
@@ -227,6 +240,21 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
 
   const expulsion = breakdown?.expulsion;
 
+  const handleExportStudentCsv = () => {
+    const exportData = buildSingleStudentExportData(statusData, studentRecords);
+    const csv = generateCsvString(exportData.headers, exportData.rows);
+    downloadCsvFile(exportData.filename, csv);
+    showToast(`✅ Rekod ${student.name} berjaya dimuat turun sebagai CSV!`, 'success');
+  };
+
+  const handleExportStudentSheets = async () => {
+    const exportData = buildSingleStudentExportData(statusData, studentRecords);
+    const tsv = generateTsvString(exportData.headers, exportData.rows);
+    await copyToClipboard(tsv);
+    openNewGoogleSheet();
+    showToast(`🚀 Google Sheets dibuka! Data ${student.name} telah disalin ke papan keratan (tekan Ctrl+V).`, 'success');
+  };
+
   return (
     <>
       <Modal
@@ -249,16 +277,36 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                 <span className="text-emerald-700 font-bold">Aktif Dalam Sistem</span>
               )}
             </div>
-            <button
-              type="button"
-              id="btn-profile-delete-student"
-              onClick={() => setIsDeleteModalOpen(true)}
-              className="self-start sm:self-auto px-3 py-1.5 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
-              title="Padam murid atau tandakan sebagai pindah / dibuang sekolah"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-              <span>Padam / Pindah / Buang Murid</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={handleExportStudentSheets}
+                className="px-2.5 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
+                title="Buka data murid ini di Google Sheets"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+                <span>Buka di Sheets</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportStudentCsv}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs"
+                title="Muat turun fail CSV profil dan rekod amaran murid ini"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-600" />
+                <span>Muat Turun CSV</span>
+              </button>
+              <button
+                type="button"
+                id="btn-profile-delete-student"
+                onClick={() => setIsDeleteModalOpen(true)}
+                className="px-2.5 py-1.5 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
+                title="Padam murid atau tandakan sebagai pindah / dibuang sekolah"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>Padam / Pindah</span>
+              </button>
+            </div>
           </div>
 
           {/* Ringkasan Statistik Murid */}

@@ -5,9 +5,11 @@ import {
   SchoolClass,
   Student,
   StudentWarningStatus,
+  WarningLetter,
 } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { StudentProfileModal } from '../../components/attendance/StudentProfileModal';
+import { DataExportModal } from '../../components/common/DataExportModal';
 import { dataService } from '../../services/dataService';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/common/Toast';
@@ -32,6 +34,7 @@ import {
   ShieldAlert,
   CheckCircle2,
   AlertTriangle,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 interface AdminStudentsProps {
@@ -39,6 +42,7 @@ interface AdminStudentsProps {
   classes: SchoolClass[];
   attendance: AttendanceRecord[];
   studentStatuses: StudentWarningStatus[];
+  warnings?: WarningLetter[];
   onRefreshData: () => void;
   onNavigate?: (view: string) => void;
 }
@@ -48,6 +52,7 @@ export const AdminStudents: React.FC<AdminStudentsProps> = ({
   classes,
   attendance,
   studentStatuses,
+  warnings = [],
   onRefreshData,
   onNavigate,
 }) => {
@@ -58,6 +63,7 @@ export const AdminStudents: React.FC<AdminStudentsProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedClass, setSelectedClass] = useState<string>('ALL');
   const [inspectingStatus, setInspectingStatus] = useState<StudentWarningStatus | null>(null);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
 
   const [isStudentModalOpen, setIsStudentModalOpen] = useState<boolean>(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
@@ -225,7 +231,7 @@ export const AdminStudents: React.FC<AdminStudentsProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           {onNavigate && (
             <button
               onClick={() => onNavigate('admin_import')}
@@ -234,6 +240,17 @@ export const AdminStudents: React.FC<AdminStudentsProps> = ({
               <span>📥 Auto-Daftar Melalui Import</span>
             </button>
           )}
+
+          <button
+            type="button"
+            id="btn-open-export-students"
+            onClick={() => setIsExportModalOpen(true)}
+            className="px-3.5 py-2 text-xs font-bold rounded-xl text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 shadow-2xs flex items-center gap-1.5 transition"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span>Eksport (CSV / Sheets)</span>
+          </button>
+
           <button
             onClick={handleOpenAdd}
             className="px-4 py-2 text-xs font-semibold rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs flex items-center gap-1.5 transition"
@@ -953,6 +970,19 @@ export const AdminStudents: React.FC<AdminStudentsProps> = ({
           </div>
         )}
       </Modal>
+
+      {/* Modal Eksport Data Murid & Amaran */}
+      <DataExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        students={students}
+        studentStatuses={studentStatuses}
+        attendance={attendance}
+        warnings={warnings}
+        classes={classes}
+        initialDataset="student_warnings_master"
+        defaultClass={selectedClass}
+      />
     </div>
   );
 };

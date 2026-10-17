@@ -3,6 +3,7 @@ import {
   AttendanceRecord,
   AttendanceSettings,
   SchoolClass,
+  Student,
   StudentWarningStatus,
   WarningLetter,
   WarningType,
@@ -10,6 +11,7 @@ import {
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { StudentProfileModal } from '../../components/attendance/StudentProfileModal';
 import { RecordWarningModal } from '../../components/attendance/RecordWarningModal';
+import { DataExportModal } from '../../components/common/DataExportModal';
 import { formatDateDisplay } from '../../utils/dateUtils';
 import { sortSchoolClasses } from '../../utils/classOrder';
 import {
@@ -23,6 +25,7 @@ import {
   CheckCircle2,
   Calendar,
   ShieldAlert,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 interface AdminWarningsProps {
@@ -30,6 +33,8 @@ interface AdminWarningsProps {
   attendance: AttendanceRecord[];
   classes: SchoolClass[];
   settings: AttendanceSettings;
+  students?: Student[];
+  warnings?: WarningLetter[];
   onRefreshData: () => void;
 }
 
@@ -38,11 +43,14 @@ export const AdminWarnings: React.FC<AdminWarningsProps> = ({
   attendance,
   classes,
   settings,
+  students = [],
+  warnings = [],
   onRefreshData,
 }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedClass, setSelectedClass] = useState<string>('ALL');
   const [filterAction, setFilterAction] = useState<string>('NEED_ACTION');
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
 
   const [inspectingStatus, setInspectingStatus] = useState<StudentWarningStatus | null>(null);
   const [recordingTarget, setRecordingTarget] = useState<{
@@ -95,6 +103,16 @@ export const AdminWarnings: React.FC<AdminWarningsProps> = ({
             Senarai murid yang telah melepasi ambang ketidakhadiran dan memerlukan tindakan pengeluaran surat amaran
           </p>
         </div>
+
+        <button
+          type="button"
+          id="btn-open-export-warnings"
+          onClick={() => setIsExportModalOpen(true)}
+          className="px-3.5 py-2 text-xs font-bold rounded-xl text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 shadow-2xs flex items-center gap-2 transition self-start sm:self-auto"
+        >
+          <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+          <span>Eksport Data (CSV / Google Sheets)</span>
+        </button>
       </div>
 
       {/* Notis Penting KPM / idMe */}
@@ -459,6 +477,19 @@ export const AdminWarnings: React.FC<AdminWarningsProps> = ({
           onSaved={onRefreshData}
         />
       )}
+
+      {/* Modal Eksport Data (CSV & Google Sheets) */}
+      <DataExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        students={students}
+        studentStatuses={studentStatuses}
+        attendance={attendance}
+        warnings={warnings}
+        classes={classes}
+        initialDataset="student_warnings_master"
+        defaultClass={selectedClass}
+      />
     </div>
   );
 };

@@ -2,12 +2,16 @@ import React, { useState } from 'react';
 import {
   AttendanceRecord,
   AttendanceSettings,
+  SchoolClass,
+  Student,
   StudentWarningStatus,
+  WarningLetter,
   WarningType,
 } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { StudentProfileModal } from '../../components/attendance/StudentProfileModal';
 import { RecordWarningModal } from '../../components/attendance/RecordWarningModal';
+import { DataExportModal } from '../../components/common/DataExportModal';
 import { useAuth } from '../../context/AuthContext';
 import { formatDateDisplay } from '../../utils/dateUtils';
 import {
@@ -19,12 +23,16 @@ import {
   Edit3,
   CheckCircle2,
   ShieldAlert,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 interface TeacherWarningsProps {
   studentStatuses: StudentWarningStatus[];
   attendance: AttendanceRecord[];
   settings: AttendanceSettings;
+  students?: Student[];
+  warnings?: WarningLetter[];
+  classes?: SchoolClass[];
   onRefreshData: () => void;
 }
 
@@ -32,6 +40,9 @@ export const TeacherWarnings: React.FC<TeacherWarningsProps> = ({
   studentStatuses,
   attendance,
   settings,
+  students = [],
+  warnings = [],
+  classes = [],
   onRefreshData,
 }) => {
   const { user } = useAuth();
@@ -42,6 +53,7 @@ export const TeacherWarnings: React.FC<TeacherWarningsProps> = ({
     status: StudentWarningStatus;
     type: WarningType;
   } | null>(null);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
 
   // Penapisan data: Hanya kelas guru sahaja
   const myStatuses = studentStatuses.filter((s) => s.student.className === assignedClass);
@@ -49,16 +61,28 @@ export const TeacherWarnings: React.FC<TeacherWarningsProps> = ({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold mb-1">
-          <span>Kelas {assignedClass}</span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold mb-1">
+            <span>Kelas {assignedClass}</span>
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+            Pengurusan Tindakan Surat Amaran Kelas {assignedClass}
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Pantau status ketidakhadiran murid dan rekodkan tarikh surat amaran yang telah dikeluarkan melalui idMe / MOEIS
+          </p>
         </div>
-        <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-          Pengurusan Tindakan Surat Amaran Kelas {assignedClass}
-        </h2>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Pantau status ketidakhadiran murid dan rekodkan tarikh surat amaran yang telah dikeluarkan melalui idMe / MOEIS
-        </p>
+
+        <button
+          type="button"
+          id="btn-open-export-teacher"
+          onClick={() => setIsExportModalOpen(true)}
+          className="px-3.5 py-2 text-xs font-bold rounded-xl text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 shadow-2xs flex items-center gap-1.5 transition self-start sm:self-auto"
+        >
+          <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+          <span>Eksport (CSV / Sheets)</span>
+        </button>
       </div>
 
       {/* Peringatan Rasmi KPM */}
@@ -372,6 +396,20 @@ export const TeacherWarnings: React.FC<TeacherWarningsProps> = ({
           onSaved={onRefreshData}
         />
       )}
+
+      {/* Modal Eksport Data Kelas */}
+      <DataExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        students={students}
+        studentStatuses={studentStatuses}
+        attendance={attendance}
+        warnings={warnings}
+        classes={classes}
+        initialDataset="student_warnings_master"
+        defaultClass={assignedClass}
+        lockClass={true}
+      />
     </div>
   );
 };

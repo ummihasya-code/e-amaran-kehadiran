@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
-import { AttendanceRecord, SchoolClass, Student } from '../../types';
+import {
+  AttendanceRecord,
+  SchoolClass,
+  Student,
+  StudentWarningStatus,
+  WarningLetter,
+} from '../../types';
 import { formatDateDisplay } from '../../utils/dateUtils';
 import { AddAttendanceModal } from '../../components/attendance/AddAttendanceModal';
 import { EditAttendanceModal } from '../../components/attendance/EditAttendanceModal';
 import { ConfirmationDialog } from '../../components/common/ConfirmationDialog';
+import { DataExportModal } from '../../components/common/DataExportModal';
 import { dataService } from '../../services/dataService';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/common/Toast';
@@ -18,12 +25,15 @@ import {
   Stethoscope,
   AlertCircle,
   FileCheck,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 interface AdminAttendanceListProps {
   attendance: AttendanceRecord[];
   students: Student[];
   classes: SchoolClass[];
+  studentStatuses?: StudentWarningStatus[];
+  warnings?: WarningLetter[];
   onRefreshData: () => void;
 }
 
@@ -31,6 +41,8 @@ export const AdminAttendanceList: React.FC<AdminAttendanceListProps> = ({
   attendance,
   students,
   classes,
+  studentStatuses = [],
+  warnings = [],
   onRefreshData,
 }) => {
   const { user } = useAuth();
@@ -40,6 +52,7 @@ export const AdminAttendanceList: React.FC<AdminAttendanceListProps> = ({
   const [selectedClass, setSelectedClass] = useState<string>('ALL');
   const [filterType, setFilterType] = useState<'ALL' | 'COUNTED' | 'DOCTOR'>('ALL');
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
@@ -94,13 +107,25 @@ export const AdminAttendanceList: React.FC<AdminAttendanceListProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="px-4 py-2 text-xs font-semibold rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs flex items-center gap-1.5 transition self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ Tambah Rekod Kehadiran</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            id="btn-open-export-attendance"
+            onClick={() => setIsExportModalOpen(true)}
+            className="px-3.5 py-2 text-xs font-bold rounded-xl text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 shadow-2xs flex items-center gap-1.5 transition"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span>Eksport (CSV / Sheets)</span>
+          </button>
+
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="px-4 py-2 text-xs font-semibold rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs flex items-center gap-1.5 transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Tambah Rekod Kehadiran</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter & Search Bar */}
@@ -291,6 +316,19 @@ export const AdminAttendanceList: React.FC<AdminAttendanceListProps> = ({
         requireReason={true}
         confirmLabel="Padam Rekod"
         isDestructive={true}
+      />
+
+      {/* Modal Eksport Kehadiran */}
+      <DataExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        students={students}
+        studentStatuses={studentStatuses}
+        attendance={attendance}
+        warnings={warnings}
+        classes={classes}
+        initialDataset="attendance_records"
+        defaultClass={selectedClass}
       />
     </div>
   );
