@@ -1345,23 +1345,28 @@ class DataService {
   }
 
   // SETTINGS
+ 
   async getSettings(): Promise<AttendanceSettings> {
     try {
       const snap = await getDocs(collection(db, 'settings'));
+
       if (!snap.empty) {
         const found = snap.docs.find((d) => d.id === 'rules');
+
         if (found) {
-          const data = found.data() as AttendanceSettings;
-          setLocal('settings', data);
-          return data;
+          // Baca terus daripada Firebase tanpa menulis ke localStorage
+          return found.data() as AttendanceSettings;
         }
       }
-    } catch {
-      // fallback
+    } catch (e) {
+      console.warn('Gagal membaca tetapan Firebase:', e);
     }
+
     return getLocal<AttendanceSettings>('settings', DEFAULT_SETTINGS);
   }
 
+
+  
   async saveSettings(
     settings: AttendanceSettings,
     user?: { id: string; name?: string }
@@ -1371,16 +1376,17 @@ class DataService {
       updatedAt: new Date().toISOString(),
       updatedBy: user?.name || 'Admin',
     };
-    setLocal('settings', updated);
 
+    // Simpan tetapan utama ke Firebase
     try {
-      await setDoc(doc(db, 'settings', 'rules'), sanitizeForFirestore(updated), { merge: true });
+      await setDoc(
+        doc(db, 'settings', 'rules'),
+        sanitizeForFirestore(updated),
+        { merge: true }
+      );
     } catch (e) {
-      if (auth.currentUser) {
-        handleFirestoreError(e, OperationType.WRITE, `settings/rules`, auth.currentUser);
-      } else {
-        console.warn('Firestore settings write fallback: ', e);
-      }
+      console.error('Gagal menyimpan tetapan ke Firebase:', e);
+      throw e;
     }
 
     await this.addAuditLog(
@@ -1396,6 +1402,7 @@ class DataService {
       user
     );
   }
+
 }
 
 export const dataService = new DataService();
