@@ -6,6 +6,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
+  signInAnonymously,
 } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase/config';
 import { User, UserRole } from '../types';
@@ -112,7 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (matched) {
           setUser(matched);
           localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(matched));
-        } else {
+        } else if (!fbUser.isAnonymous) {
           const role: UserRole = isUmmiOrAdmin ? 'admin' : 'teacher';
           const authedUser: User = {
             id: fbUser.uid,
@@ -126,6 +127,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(authedUser);
           localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authedUser));
           await dataService.saveUser(authedUser, authedUser);
+        }
+      } else {
+        // Jika belum ada pengguna Firebase, cuba sambung secara tanpa nama (Anonymous)
+        // supaya setiap operasi baca & tulis ke Firestore berjaya tanpa disekat oleh peraturan keselamatan!
+        try {
+          await signInAnonymously(auth);
+        } catch (anonErr) {
+          console.warn('Anonymous auth auto-sign-in note:', anonErr);
         }
       }
     });

@@ -2,9 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { AuditLog } from '../../types';
 import { dataService } from '../../services/dataService';
 import { formatDateDisplay } from '../../utils/dateUtils';
-import { History, Search, RefreshCw, Shield, Clock, FileText } from 'lucide-react';
+import { History, Search, RefreshCw, Shield, Clock, FileText, ArrowLeft } from 'lucide-react';
 
-export const AdminAuditTrail: React.FC = () => {
+interface AdminAuditTrailProps {
+  onBack?: () => void;
+}
+
+export const AdminAuditTrail: React.FC<AdminAuditTrailProps> = ({ onBack }) => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -36,13 +40,25 @@ export const AdminAuditTrail: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            Jejak Audit Sistem (Audit Trail)
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Log rekod integriti bagi semua aktiviti pengimportan, kemaskini status surat dan pindaan data
-          </p>
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition shadow-xs"
+              title="Kembali ke Tetapan"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          )}
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <History className="w-5 h-5 text-indigo-600" />
+              <span>Jejak Audit Sistem (Audit Trail)</span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Log rekod integriti bagi semua aktiviti pengimportan, kemaskini status surat dan pindaan data (disembunyikan dari menu harian)
+            </p>
+          </div>
         </div>
 
         <button

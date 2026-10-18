@@ -130,6 +130,7 @@ const MainLayout: React.FC = () => {
           pendingWarningsCount={pendingWarningsCount}
           isMobileOpen={isMobileMenuOpen}
           onCloseMobile={() => setIsMobileMenuOpen(false)}
+          showAuditTrail={settings.showAuditTrailMenu ?? false}
         />
 
         <main className="flex-1 p-3.5 sm:p-5 lg:p-8 pb-24 lg:pb-8 overflow-x-hidden min-w-0">
@@ -223,10 +224,16 @@ const MainLayout: React.FC = () => {
               )}
 
               {currentView === 'admin_settings' && (
-                <AdminSettings settings={settings} onRefreshData={loadAllData} />
+                <AdminSettings
+                  settings={settings}
+                  onRefreshData={loadAllData}
+                  onNavigate={(v) => setCurrentView(v as AppView)}
+                />
               )}
 
-              {currentView === 'admin_audit' && <AdminAuditTrail />}
+              {currentView === 'admin_audit' && (
+                <AdminAuditTrail onBack={() => setCurrentView('admin_settings')} />
+              )}
             </>
           )}
 

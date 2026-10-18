@@ -12,15 +12,24 @@ import {
   AlertTriangle,
   Info,
   CheckCircle2,
+  History,
+  Eye,
+  EyeOff,
+  ShieldCheck,
 } from 'lucide-react';
 import { DEFAULT_SETTINGS } from '../../services/warningEngine';
 
 interface AdminSettingsProps {
   settings: AttendanceSettings;
   onRefreshData: () => void;
+  onNavigate?: (view: string) => void;
 }
 
-export const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onRefreshData }) => {
+export const AdminSettings: React.FC<AdminSettingsProps> = ({
+  settings,
+  onRefreshData,
+  onNavigate,
+}) => {
   const { user } = useAuth();
   const { showToast } = useToast();
 
@@ -39,6 +48,9 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onRefres
   const [calculationMethod, setCalculationMethod] = useState<'cumulative' | 'consecutive'>(
     settings.calculationMethod || 'cumulative'
   );
+  const [showAuditTrailMenu, setShowAuditTrailMenu] = useState<boolean>(
+    settings.showAuditTrailMenu ?? false
+  );
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   useEffect(() => {
@@ -53,6 +65,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onRefres
     setCExp(settings.consecutiveExpulsion ?? 14);
 
     setCalculationMethod(settings.calculationMethod || 'cumulative');
+    setShowAuditTrailMenu(settings.showAuditTrailMenu ?? false);
   }, [settings]);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -81,6 +94,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onRefres
         consecutiveW3: Number(c3),
         consecutiveExpulsion: Number(cExp),
         calculationMethod,
+        showAuditTrailMenu,
         updatedAt: new Date().toISOString(),
         updatedBy: user?.name || 'Pentadbir',
       };
@@ -90,7 +104,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onRefres
         user ? { id: user.id, name: user.name } : undefined
       );
 
-      showToast('✅ Tetapan peraturan amaran Anchor Date berjaya disimpan.', 'success');
+      showToast('✅ Tetapan berjaya disimpan.', 'success');
       onRefreshData();
     } catch (err) {
       console.error(err);
@@ -112,6 +126,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onRefres
     setCExp(DEFAULT_SETTINGS.consecutiveExpulsion ?? 14);
 
     setCalculationMethod(DEFAULT_SETTINGS.calculationMethod);
+    setShowAuditTrailMenu(false);
     showToast('Nilai tetapan dikembalikan kepada standard KPM (SPI Bil. 7/2003).', 'info');
   };
 
@@ -414,6 +429,88 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onRefres
                 <p className="text-[10.5px] text-slate-500 leading-tight">
                   Selepas Surat Amaran 3 (Lalai KPM: 14 hari).
                 </p>
+              </div>
+            </div>
+          </div>
+
+          {/* KAWALAN PAPARAN NAVIGASI & JEJAK AUDIT (AUDIT TRAIL) */}
+          <div className="border-t border-slate-100 pt-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                  <History className="w-4 h-4 text-indigo-600" />
+                  <span>Kawalan Paparan Navigasi & Jejak Audit (Audit Trail)</span>
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Pengurusan paparan menu audit teknikal bagi mengekalkan antara muka yang bersih dan mesra pengguna.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/60">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span className="text-xs font-bold text-slate-900">
+                      Adakah Audit Trail Perlu Dipaparkan dalam Menu Utama?
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                      Disyorkan: Sembunyi
+                    </span>
+                  </div>
+                  <p className="text-[11.5px] text-slate-600 leading-relaxed max-w-2xl">
+                    <strong>Tidak perlu untuk urusan harian.</strong> Audit Trail mengandungi log teknikal sistem
+                    (sejarah log masuk, penukaran status rekod, dan log pemadaman). Ia disembunyikan supaya menu sisi
+                    lebih kemas dan fokus kepada operasi kehadiran & surat amaran harian guru.
+                  </p>
+                  <p className="text-[11px] text-slate-500 italic">
+                    * Log jejak audit tetap aktif berjalan secara automatik di latar belakang untuk keselamatan data
+                    dan membolehkan fungsi <strong>Undo / Pulihkan Kelas & Murid</strong> yang dipadam secara tidak sengaja.
+                  </p>
+                </div>
+
+                {onNavigate && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('admin_audit')}
+                    className="self-start sm:self-center px-3.5 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition flex items-center gap-1.5 shrink-0"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    <span>Semak Log Audit Sekarang</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Toggle Sembunyi / Papar */}
+              <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200">
+                <div className="flex items-center gap-2.5">
+                  {showAuditTrailMenu ? (
+                    <Eye className="w-4 h-4 text-indigo-600" />
+                  ) : (
+                    <EyeOff className="w-4 h-4 text-slate-400" />
+                  )}
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 block">
+                      Papar Menu 'Audit Trail' dalam Sidebar Navigasi
+                    </span>
+                    <span className="text-[10.5px] text-slate-500">
+                      {showAuditTrailMenu
+                        ? 'Menu Audit Trail sedang dipaparkan di bar navigasi sisi.'
+                        : 'Menu Audit Trail disembunyikan daripada bar navigasi sisi (Lalai Disyorkan).'}
+                    </span>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showAuditTrailMenu}
+                    onChange={(e) => setShowAuditTrailMenu(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
               </div>
             </div>
           </div>

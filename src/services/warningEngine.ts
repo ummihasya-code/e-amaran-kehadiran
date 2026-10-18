@@ -30,6 +30,7 @@ export const DEFAULT_SETTINGS: AttendanceSettings = {
   notes:
     'Berdasarkan Surat Pekeliling Ikhtisas KPM Bil. 7/2003 dengan pengiraan Anchor Date (Tarikh Surat Terdahulu).',
   referenceSource: 'Surat Pekeliling Ikhtisas KPM Bil. 7/2003 & Panduan Pengurusan Disiplin Murid',
+  showAuditTrailMenu: false, // Disembunyikan daripada menu navigasi utama secara lalai
   updatedAt: new Date().toISOString(),
   updatedBy: 'Pentadbir Sistem',
 };

@@ -38,6 +38,20 @@ export interface SchoolClass {
   teacherId?: string;
   teacherName?: string;
   active: boolean;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
+  deletedReason?: string;
+}
+
+export interface ArchivedClassItem {
+  schoolClass: SchoolClass;
+  deletedAt?: string;
+  deletedBy?: string;
+  deletedReason?: string;
+  studentCount: number;
+  attendanceCount: number;
+  source: 'database' | 'audit_log';
 }
 
 export interface AttendanceRecord {
@@ -104,6 +118,7 @@ export interface AttendanceSettings {
   isActive: boolean;
   notes: string;
   referenceSource: string;
+  showAuditTrailMenu?: boolean; // Lalai: false (disembunyikan daripada menu navigasi utama)
   updatedAt: string;
   updatedBy: string;
 }

@@ -11,6 +11,7 @@ import { StatusBadge } from '../../components/common/StatusBadge';
 import { StudentProfileModal } from '../../components/attendance/StudentProfileModal';
 import { AddAttendanceModal } from '../../components/attendance/AddAttendanceModal';
 import { DataExportModal } from '../../components/common/DataExportModal';
+import { CloudSyncModal } from '../../components/common/CloudSyncModal';
 import { sortSchoolClasses } from '../../utils/classOrder';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -36,6 +37,7 @@ import {
   Eye,
   CheckCircle2,
   FileSpreadsheet,
+  Cloud,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -64,6 +66,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedStudentStatus, setSelectedStudentStatus] = useState<StudentWarningStatus | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState<boolean>(false);
 
   // Kira statistik sekolah
   const activeAttendance = attendance.filter((a) => !a.isDeleted);
@@ -135,6 +138,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            id="btn-open-sync-dashboard"
+            onClick={() => setIsSyncModalOpen(true)}
+            className="px-3.5 py-2 text-xs font-bold rounded-xl text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 shadow-2xs flex items-center gap-1.5 transition"
+            title="Penyegerakan Firebase Firestore"
+          >
+            <Cloud className="w-4 h-4 text-indigo-600" />
+            <span>Segerak Firebase</span>
+          </button>
           <button
             type="button"
             id="btn-open-export-dashboard"
@@ -428,6 +441,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         warnings={warnings}
         classes={classes}
         initialDataset="student_warnings_master"
+      />
+
+      {/* Modal Penyegerakan Firebase Firestore */}
+      <CloudSyncModal
+        isOpen={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
+        onSyncComplete={onRefreshData}
       />
     </div>
   );

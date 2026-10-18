@@ -42,6 +42,7 @@ interface SidebarProps {
   pendingWarningsCount?: number;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
+  showAuditTrail?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -50,10 +51,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   pendingWarningsCount = 0,
   isMobileOpen = false,
   onCloseMobile,
+  showAuditTrail = false,
 }) => {
   const { role, switchUserRole } = useAuth();
 
-  const adminNavItems: { id: AdminView; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
+  const baseAdminNavItems: { id: AdminView; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
     { id: 'admin_dashboard', label: 'Dashboard', icon: Home },
     { id: 'admin_students', label: 'Senarai Murid', icon: GraduationCap },
     { id: 'admin_classes', label: 'Pengurusan Kelas', icon: School },
@@ -68,8 +70,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'admin_reports', label: 'Laporan & Statistik', icon: BarChart3 },
     { id: 'admin_import', label: 'Import Data (Excel)', icon: FileSpreadsheet },
     { id: 'admin_settings', label: 'Tetapan Sistem', icon: Settings },
-    { id: 'admin_audit', label: 'Audit Trail', icon: History },
   ];
+
+  const adminNavItems = showAuditTrail
+    ? [...baseAdminNavItems, { id: 'admin_audit' as AdminView, label: 'Audit Trail', icon: History }]
+    : baseAdminNavItems;
 
   const teacherNavItems: { id: TeacherView; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
     { id: 'teacher_dashboard', label: 'Dashboard Kelas', icon: Home },

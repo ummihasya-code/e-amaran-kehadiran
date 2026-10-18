@@ -14,6 +14,7 @@ import {
   Menu,
 } from 'lucide-react';
 import { UserRole, User } from '../../types';
+import { CloudSyncModal } from '../common/CloudSyncModal';
 
 interface NavbarProps {
   onOpenMobileMenu?: () => void;
@@ -35,6 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileMenu }) => {
   const { showToast } = useToast();
 
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState<boolean>(false);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState<boolean>(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Tutup dropdown apabila klik di luar
@@ -126,22 +128,28 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileMenu }) => {
         <div className="flex items-center gap-1.5 sm:gap-2.5">
           {/* Cloud Sync Status / Connect Button */}
           {isCloudConnected ? (
-            <div
-              className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] font-medium text-emerald-800"
-              title={`Disegerakkan ke Firestore (${firebaseUser?.email})`}
+            <button
+              type="button"
+              id="btn-open-cloud-sync"
+              onClick={() => setIsSyncModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-[11px] font-bold text-emerald-800 transition shadow-2xs"
+              title="Status & Penyegerakan Firebase Awan (Klik untuk semak status atau segerak data)"
             >
               <Cloud className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="hidden lg:inline">Awan Aktif</span>
-            </div>
+              <span className="hidden sm:inline">Firebase Awan Aktif</span>
+              <span className="sm:hidden text-[10px]">Awan</span>
+            </button>
           ) : (
             <button
-              onClick={handleGoogleConnect}
-              className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-[11px] font-semibold text-amber-900 transition shadow-2xs"
-              title="Klik untuk log masuk Google dan menyegerakkan terus ke Firestore Awan"
+              type="button"
+              id="btn-open-cloud-sync-warning"
+              onClick={() => setIsSyncModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-[11px] font-bold text-amber-900 transition shadow-2xs"
+              title="Klik untuk membuka Pusat Penyegerakan Firebase Firestore"
             >
               <CloudOff className="w-3.5 h-3.5 text-amber-600" />
-              <span className="hidden sm:inline">Log Masuk Google</span>
-              <span className="sm:hidden text-[10px]">Awan</span>
+              <span className="hidden sm:inline">Segerak Firebase</span>
+              <span className="sm:hidden text-[10px]">Segerak</span>
             </button>
           )}
 
@@ -305,6 +313,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileMenu }) => {
           </button>
         </div>
       </div>
+
+      {/* Modal Pusat Penyegerakan Firebase Firestore */}
+      <CloudSyncModal
+        isOpen={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
+      />
     </header>
   );
 };

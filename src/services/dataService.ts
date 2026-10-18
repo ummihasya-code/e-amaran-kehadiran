@@ -9,9 +9,11 @@ import {
   orderBy,
   writeBatch,
 } from 'firebase/firestore';
+import { signInAnonymously } from 'firebase/auth';
 import { db, auth } from '../firebase/config';
 import { handleFirestoreError, OperationType } from '../firebase/firestoreErrors';
 import {
+  ArchivedClassItem,
   ArchivedStudentItem,
   AttendanceRecord,
   AttendanceSettings,
@@ -103,7 +105,18 @@ class DataService {
     this.initialized = true;
   }
 
+  async ensureAuth(): Promise<boolean> {
+    if (auth.currentUser) return true;
+    try {
+      await signInAnonymously(auth);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async ensureFirestoreSeeded(): Promise<void> {
+    await this.ensureAuth();
     if (!auth.currentUser) {
       return;
     }
@@ -115,6 +128,7 @@ class DataService {
         const students = getLocal<Student[]>('students', INITIAL_STUDENTS);
         const attendance = getLocal<AttendanceRecord[]>('attendance', generateInitialAttendance());
         const settings = getLocal<AttendanceSettings>('settings', DEFAULT_SETTINGS);
+        const warnings = getLocal<WarningLetter[]>('warningLetters', []);
 
         const batch = writeBatch(db);
         for (const c of classes) {
@@ -126,8 +140,11 @@ class DataService {
         for (const s of students) {
           batch.set(doc(db, 'students', s.id), sanitizeForFirestore(s), { merge: true });
         }
-        for (const a of attendance.slice(0, 50)) {
+        for (const a of attendance.slice(0, 300)) {
           batch.set(doc(db, 'attendance', a.id), sanitizeForFirestore(a), { merge: true });
+        }
+        for (const w of warnings) {
+          batch.set(doc(db, 'warningLetters', w.id), sanitizeForFirestore(w), { merge: true });
         }
         batch.set(doc(db, 'settings', settings.id || 'rules'), sanitizeForFirestore(settings), { merge: true });
         await batch.commit();
@@ -135,6 +152,181 @@ class DataService {
       }
     } catch (e) {
       console.warn('ensureFirestoreSeeded notice: ', e);
+    }
+  }
+
+  // SEGERAK SEMUA DATA TEMPATAN KE FIRESTORE (CLOUD SYNC)
+  async syncAllToFirestore(user?: { id: string; name?: string }): Promise<{
+    success: boolean;
+    counts: {
+      classes: number;
+      students: number;
+      attendance: number;
+      warnings: number;
+      users: number;
+    };
+    error?: string;
+  }> {
+    await this.ensureAuth();
+    if (!auth.currentUser) {
+      return {
+        success: false,
+        counts: { classes: 0, students: 0, attendance: 0, warnings: 0, users: 0 },
+        error:
+          'Sesi sambungan ke Firebase Auth belum bersambung. Sila pastikan anda log masuk melalui akaun Google atau sambungan awan dihidupkan.',
+      };
+    }
+
+    try {
+      const classes = getLocal<SchoolClass[]>('classes', INITIAL_CLASSES);
+      const students = getLocal<Student[]>('students', INITIAL_STUDENTS);
+      const attendance = getLocal<AttendanceRecord[]>('attendance', []);
+      const warnings = getLocal<WarningLetter[]>('warningLetters', []);
+      const settings = getLocal<AttendanceSettings>('settings', DEFAULT_SETTINGS);
+      const users = getLocal<User[]>('users', INITIAL_USERS);
+
+      const allOps: Array<{ coll: string; id: string; data: any }> = [];
+
+      classes.forEach((c) => allOps.push({ coll: 'classes', id: c.id, data: sanitizeForFirestore(c) }));
+      students.forEach((s) => allOps.push({ coll: 'students', id: s.id, data: sanitizeForFirestore(s) }));
+      attendance.forEach((a) => allOps.push({ coll: 'attendance', id: a.id, data: sanitizeForFirestore(a) }));
+      warnings.forEach((w) => allOps.push({ coll: 'warningLetters', id: w.id, data: sanitizeForFirestore(w) }));
+      users.forEach((u) => allOps.push({ coll: 'users', id: u.id, data: sanitizeForFirestore(u) }));
+      allOps.push({ coll: 'settings', id: settings.id || 'rules', data: sanitizeForFirestore(settings) });
+
+      // Firestore had 500 operasi setiap batch; guna saiz selamat 350
+      const BATCH_SIZE = 350;
+      for (let i = 0; i < allOps.length; i += BATCH_SIZE) {
+        const chunk = allOps.slice(i, i + BATCH_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach((op) => {
+          batch.set(doc(db, op.coll, op.id), op.data, { merge: true });
+        });
+        await batch.commit();
+      }
+
+      await this.addAuditLog(
+        'Segerak Semua Data ke Firestore',
+        'system',
+        'cloud_sync',
+        {
+          classesCount: classes.length,
+          studentsCount: students.length,
+          attendanceCount: attendance.length,
+          warningsCount: warnings.length,
+          usersCount: users.length,
+        },
+        user
+      );
+
+      return {
+        success: true,
+        counts: {
+          classes: classes.length,
+          students: students.length,
+          attendance: attendance.length,
+          warnings: warnings.length,
+          users: users.length,
+        },
+      };
+    } catch (err: any) {
+      console.error('syncAllToFirestore error:', err);
+      return {
+        success: false,
+        counts: { classes: 0, students: 0, attendance: 0, warnings: 0, users: 0 },
+        error: err?.message || 'Ralat tidak diketahui semasa memuat naik ke Firestore.',
+      };
+    }
+  }
+
+  // TARIK DATA DARI FIRESTORE KE DALAM CACHE TEMPATAN
+  async fetchFromFirestore(): Promise<{
+    classes: number;
+    students: number;
+    attendance: number;
+    warnings: number;
+  }> {
+    await this.ensureAuth();
+    if (!auth.currentUser) {
+      throw new Error('Sesi Firebase Auth tidak aktif.');
+    }
+
+    const [clsSnap, stdSnap, attSnap, wrnSnap, setSnap] = await Promise.all([
+      getDocs(collection(db, 'classes')),
+      getDocs(collection(db, 'students')),
+      getDocs(collection(db, 'attendance')),
+      getDocs(collection(db, 'warningLetters')),
+      getDocs(collection(db, 'settings')),
+    ]);
+
+    const counts = { classes: 0, students: 0, attendance: 0, warnings: 0 };
+
+    if (!clsSnap.empty) {
+      const list = clsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as SchoolClass);
+      setLocal('classes', sortSchoolClasses(list));
+      counts.classes = list.length;
+    }
+    if (!stdSnap.empty) {
+      const list = stdSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Student);
+      setLocal('students', list);
+      counts.students = list.length;
+    }
+    if (!attSnap.empty) {
+      const list = attSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as AttendanceRecord);
+      setLocal('attendance', list);
+      counts.attendance = list.length;
+    }
+    if (!wrnSnap.empty) {
+      const list = wrnSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as WarningLetter);
+      setLocal('warningLetters', list);
+      counts.warnings = list.length;
+    }
+    if (!setSnap.empty) {
+      const s = setSnap.docs[0].data() as AttendanceSettings;
+      setLocal('settings', s);
+    }
+
+    return counts;
+  }
+
+  // DAPATKAN STATISTIK PENYEGERAKAN
+  async getSyncStats(): Promise<{
+    local: { classes: number; students: number; attendance: number; warnings: number };
+    firestore: { classes: number; students: number; attendance: number; warnings: number } | null;
+    isConnected: boolean;
+  }> {
+    const local = {
+      classes: getLocal<SchoolClass[]>('classes', []).length,
+      students: getLocal<Student[]>('students', []).length,
+      attendance: getLocal<AttendanceRecord[]>('attendance', []).length,
+      warnings: getLocal<WarningLetter[]>('warningLetters', []).length,
+    };
+
+    const isConnected = !!auth.currentUser;
+    if (!isConnected) {
+      return { local, firestore: null, isConnected: false };
+    }
+
+    try {
+      const [c, s, a, w] = await Promise.all([
+        getDocs(collection(db, 'classes')),
+        getDocs(collection(db, 'students')),
+        getDocs(collection(db, 'attendance')),
+        getDocs(collection(db, 'warningLetters')),
+      ]);
+
+      return {
+        local,
+        firestore: {
+          classes: c.size,
+          students: s.size,
+          attendance: a.size,
+          warnings: w.size,
+        },
+        isConnected: true,
+      };
+    } catch {
+      return { local, firestore: null, isConnected: false };
     }
   }
 
@@ -194,13 +386,8 @@ class DataService {
 
   // STUDENTS
   async getStudents(includeInactive: boolean = false): Promise<Student[]> {
-    if (!auth.currentUser) {
-      const list = getLocal<Student[]>('students', INITIAL_STUDENTS);
-      return includeInactive
-        ? list
-        : list.filter((s) => !s.isDeleted && s.status !== 'pindah' && s.status !== 'dibuang');
-    }
     try {
+      await this.ensureAuth();
       const snap = await getDocs(collection(db, 'students'));
       if (!snap.empty) {
         const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }) as Student);
@@ -239,6 +426,7 @@ class DataService {
     setLocal('students', list);
 
     try {
+      await this.ensureAuth();
       await setDoc(doc(db, 'students', student.id), sanitizeForFirestore(student), { merge: true });
     } catch (e) {
       if (auth.currentUser) {
@@ -645,15 +833,29 @@ class DataService {
   }
 
   // CLASSES
-  async getClasses(): Promise<SchoolClass[]> {
-    if (!auth.currentUser) {
-      const localList = getLocal<SchoolClass[]>('classes', INITIAL_CLASSES);
-      return sortSchoolClasses(localList);
+  private lastDeletedClass: {
+    classItem: SchoolClass;
+    timestamp: number;
+    previousTeacherUser?: User;
+  } | null = null;
+
+  getLastDeletedClass(): SchoolClass | null {
+    if (!this.lastDeletedClass) return null;
+    // Benarkan Undo dalam tempoh 60 saat
+    if (Date.now() - this.lastDeletedClass.timestamp > 60000) {
+      return null;
     }
+    return this.lastDeletedClass.classItem;
+  }
+
+  async getClasses(): Promise<SchoolClass[]> {
     try {
+      await this.ensureAuth();
       const snap = await getDocs(collection(db, 'classes'));
       if (!snap.empty) {
-        const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }) as SchoolClass);
+        const list = snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as any) }) as SchoolClass)
+          .filter((c) => !c.isDeleted);
         const sorted = sortSchoolClasses(list);
         setLocal('classes', sorted);
         return sorted;
@@ -661,7 +863,7 @@ class DataService {
     } catch {
       // fallback
     }
-    const localList = getLocal<SchoolClass[]>('classes', INITIAL_CLASSES);
+    const localList = getLocal<SchoolClass[]>('classes', INITIAL_CLASSES).filter((c) => !c.isDeleted);
     return sortSchoolClasses(localList);
   }
 
@@ -670,15 +872,16 @@ class DataService {
     const idx = list.findIndex((c) => c.id === cls.id);
     const isNew = idx === -1;
     if (isNew) {
-      list.push(cls);
+      list.push({ ...cls, isDeleted: false, active: true });
     } else {
-      list[idx] = { ...list[idx], ...cls };
+      list[idx] = { ...list[idx], ...cls, isDeleted: false, active: true };
     }
-    const sorted = sortSchoolClasses(list);
+    const sorted = sortSchoolClasses(list.filter((c) => !c.isDeleted));
     setLocal('classes', sorted);
 
     try {
-      await setDoc(doc(db, 'classes', cls.id), sanitizeForFirestore(cls), { merge: true });
+      await this.ensureAuth();
+      await setDoc(doc(db, 'classes', cls.id), sanitizeForFirestore({ ...cls, isDeleted: false, active: true }), { merge: true });
     } catch (e) {
       if (auth.currentUser) {
         handleFirestoreError(e, OperationType.WRITE, `classes/${cls.id}`, auth.currentUser);
@@ -713,6 +916,7 @@ class DataService {
           id: cleanId,
           className: name,
           active: true,
+          isDeleted: false,
         });
       }
     }
@@ -722,6 +926,7 @@ class DataService {
       setLocal('classes', updated);
 
       try {
+        await this.ensureAuth();
         const batch = writeBatch(db);
         for (const c of toAdd) {
           batch.set(doc(db, 'classes', c.id), sanitizeForFirestore(c), { merge: true });
@@ -744,38 +949,74 @@ class DataService {
     return existing;
   }
 
-  async deleteClass(classId: string, user?: { id: string; name?: string }): Promise<void> {
+  // PADAM KELAS (DENGAN SOKONGAN UNDO & ARKIB)
+  async deleteClass(
+    classId: string,
+    user?: { id: string; name?: string },
+    options: { softDelete?: boolean } = { softDelete: true }
+  ): Promise<void> {
     const list = getLocal<SchoolClass[]>('classes', []);
     const targetClass = list.find((c) => c.id === classId);
-    const updated = list.filter((c) => c.id !== classId);
-    setLocal('classes', updated);
+    if (!targetClass) return;
 
-    // Also remove from any user's assignedClasses
-    if (targetClass) {
-      const userList = getLocal<User[]>('users', []);
-      let usersChanged = false;
-      const updatedUsers = userList.map((u) => {
-        if (
-          u.assignedClasses.includes(targetClass.className) ||
-          u.assignedClasses.includes(classId)
-        ) {
-          usersChanged = true;
-          return {
-            ...u,
-            assignedClasses: u.assignedClasses.filter(
-              (nameOrId) => nameOrId !== targetClass.className && nameOrId !== classId
-            ),
-          };
-        }
-        return u;
-      });
-      if (usersChanged) {
-        setLocal('users', updatedUsers);
+    // Simpan untuk ciri "Buat Asal (Undo)" serta-merta
+    const userList = getLocal<User[]>('users', []);
+    const prevTeacher = targetClass.teacherId
+      ? userList.find((u) => u.id === targetClass.teacherId)
+      : undefined;
+
+    this.lastDeletedClass = {
+      classItem: { ...targetClass },
+      timestamp: Date.now(),
+      previousTeacherUser: prevTeacher,
+    };
+
+    // Simpan ke dalam arkib kelas terpadam (archived_classes)
+    const archived = getLocal<SchoolClass[]>('archived_classes', []);
+    const updatedArchived = archived.filter((c) => c.id !== classId);
+    const archivedClassRecord: SchoolClass = {
+      ...targetClass,
+      active: false,
+      isDeleted: true,
+      deletedAt: new Date().toISOString(),
+      deletedBy: user?.name || 'Sistem',
+      deletedReason: 'Dipadam oleh Pentadbir',
+    };
+    updatedArchived.unshift(archivedClassRecord);
+    setLocal('archived_classes', updatedArchived);
+
+    // Buang daripada senarai kelas aktif
+    const updatedActive = list.filter((c) => c.id !== classId);
+    setLocal('classes', updatedActive);
+
+    // Keluarkan kelas dari penugasan guru (assignedClasses)
+    let usersChanged = false;
+    const updatedUsers = userList.map((u) => {
+      if (
+        u.assignedClasses.includes(targetClass.className) ||
+        u.assignedClasses.includes(classId)
+      ) {
+        usersChanged = true;
+        return {
+          ...u,
+          assignedClasses: u.assignedClasses.filter(
+            (nameOrId) => nameOrId !== targetClass.className && nameOrId !== classId
+          ),
+        };
       }
+      return u;
+    });
+    if (usersChanged) {
+      setLocal('users', updatedUsers);
     }
 
     try {
-      await deleteDoc(doc(db, 'classes', classId));
+      await this.ensureAuth();
+      if (options.softDelete) {
+        await setDoc(doc(db, 'classes', classId), sanitizeForFirestore(archivedClassRecord), { merge: true });
+      } else {
+        await deleteDoc(doc(db, 'classes', classId));
+      }
     } catch (e) {
       if (auth.currentUser) {
         handleFirestoreError(e, OperationType.DELETE, `classes/${classId}`, auth.currentUser);
@@ -788,7 +1029,211 @@ class DataService {
       'Padam Kelas',
       'class',
       classId,
-      { className: targetClass?.className || classId },
+      {
+        className: targetClass?.className || classId,
+        teacherName: targetClass?.teacherName,
+        canUndo: true,
+      },
+      user
+    );
+  }
+
+  // BUAT ASAL (UNDO) PEMADAMAN KELAS SERTA-MERTA
+  async undoDeleteClass(user?: { id: string; name?: string }): Promise<SchoolClass | null> {
+    if (!this.lastDeletedClass) return null;
+    const { classItem, previousTeacherUser } = this.lastDeletedClass;
+    this.lastDeletedClass = null;
+    return await this.restoreClass(classItem.id, classItem, user, previousTeacherUser);
+  }
+
+  // PULIHKAN KELAS DARIPADA ARKIB (RESTORE CLASS)
+  async restoreClass(
+    classId: string,
+    fallbackData?: Partial<SchoolClass>,
+    user?: { id: string; name?: string },
+    restoreTeacher?: User
+  ): Promise<SchoolClass> {
+    const activeList = getLocal<SchoolClass[]>('classes', []);
+    const archivedList = getLocal<SchoolClass[]>('archived_classes', []);
+    let targetClass = archivedList.find((c) => c.id === classId) || activeList.find((c) => c.id === classId);
+
+    if (!targetClass && fallbackData?.className) {
+      targetClass = {
+        id: classId,
+        className: fallbackData.className,
+        teacherId: fallbackData.teacherId,
+        teacherName: fallbackData.teacherName,
+        active: true,
+      };
+    }
+
+    if (!targetClass) {
+      throw new Error(`Maklumat kelas ID ${classId} tidak dijumpai untuk dipulihkan.`);
+    }
+
+    const restoredClass: SchoolClass = {
+      ...targetClass,
+      ...(fallbackData || {}),
+      active: true,
+      isDeleted: false,
+      deletedAt: undefined,
+      deletedBy: undefined,
+      deletedReason: undefined,
+    };
+
+    // Buang daripada arkib
+    const updatedArchived = archivedList.filter((c) => c.id !== classId);
+    setLocal('archived_classes', updatedArchived);
+
+    // Masukkan kembali ke senarai aktif
+    const updatedActive = activeList.filter((c) => c.id !== classId);
+    updatedActive.push(restoredClass);
+    const sorted = sortSchoolClasses(updatedActive);
+    setLocal('classes', sorted);
+
+    // Pulihkan lantikan guru jika guru tersebut masih wujud
+    const teacherIdToRestore = restoredClass.teacherId || restoreTeacher?.id;
+    if (teacherIdToRestore) {
+      const userList = getLocal<User[]>('users', []);
+      let userUpdated = false;
+      const updatedUsers = userList.map((u) => {
+        if (u.id === teacherIdToRestore) {
+          userUpdated = true;
+          const assigned = u.assignedClasses || [];
+          if (!assigned.includes(restoredClass.className)) {
+            return {
+              ...u,
+              assignedClasses: [...assigned, restoredClass.className],
+            };
+          }
+        }
+        return u;
+      });
+      if (userUpdated) {
+        setLocal('users', updatedUsers);
+      }
+    }
+
+    // Kemaskini dalam Firestore
+    try {
+      await this.ensureAuth();
+      await setDoc(doc(db, 'classes', classId), sanitizeForFirestore(restoredClass), { merge: true });
+    } catch (e) {
+      console.warn('Firestore restore class warning: fallback to local cache:', e);
+    }
+
+    await this.addAuditLog(
+      'Pulihkan Kelas (Restore)',
+      'class',
+      classId,
+      {
+        className: restoredClass.className,
+        teacherName: restoredClass.teacherName,
+      },
+      user
+    );
+
+    return restoredClass;
+  }
+
+  // DAPATKAN SENARAI KELAS DALAM ARKIB
+  async getArchivedClasses(): Promise<ArchivedClassItem[]> {
+    const archivedList = getLocal<SchoolClass[]>('archived_classes', []);
+    const activeClasses = await this.getClasses();
+    const activeClassIds = new Set(activeClasses.map((c) => c.id));
+    const activeClassNames = new Set(activeClasses.map((c) => c.className.trim().toUpperCase()));
+
+    const allStudents = await this.getStudents(true);
+    const allAttendance = await this.getAttendance();
+
+    const map = new Map<string, ArchivedClassItem>();
+
+    // 1. Rekod dari simpanan arkib kelas
+    for (const cls of archivedList) {
+      if (!activeClassIds.has(cls.id) && !activeClassNames.has(cls.className.trim().toUpperCase())) {
+        const studentCount = allStudents.filter(
+          (s) => s.className.trim().toUpperCase() === cls.className.trim().toUpperCase() || s.classId === cls.id
+        ).length;
+        const attendanceCount = allAttendance.filter(
+          (a) => a.className.trim().toUpperCase() === cls.className.trim().toUpperCase() || a.classId === cls.id
+        ).length;
+
+        map.set(cls.id, {
+          schoolClass: cls,
+          deletedAt: cls.deletedAt,
+          deletedBy: cls.deletedBy,
+          deletedReason: cls.deletedReason || 'Dipadam oleh Pentadbir',
+          studentCount,
+          attendanceCount,
+          source: 'database',
+        });
+      }
+    }
+
+    // 2. Semak jejak audit jika ada kelas yang pernah dipadam
+    try {
+      const logs = await this.getAuditLogs();
+      for (const log of logs) {
+        if (log.targetType === 'class' && log.action.includes('Padam') && log.metadata?.className) {
+          const classId = log.targetId;
+          const name = log.metadata.className;
+          if (!activeClassIds.has(classId) && !activeClassNames.has(name.toUpperCase()) && !map.has(classId)) {
+            const studentCount = allStudents.filter(
+              (s) => s.className.trim().toUpperCase() === name.toUpperCase() || s.classId === classId
+            ).length;
+            const attendanceCount = allAttendance.filter(
+              (a) => a.className.trim().toUpperCase() === name.toUpperCase() || a.classId === classId
+            ).length;
+
+            map.set(classId, {
+              schoolClass: {
+                id: classId,
+                className: name,
+                teacherName: log.metadata.teacherName,
+                active: false,
+                isDeleted: true,
+                deletedAt: log.timestamp,
+                deletedBy: log.userName,
+              },
+              deletedAt: log.timestamp,
+              deletedBy: log.userName,
+              deletedReason: 'Jejak Audit Pemadaman',
+              studentCount,
+              attendanceCount,
+              source: 'audit_log',
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Gagal membaca log jejak audit arkib kelas:', e);
+    }
+
+    return Array.from(map.values()).sort((a, b) => {
+      const tA = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
+      const tB = b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
+      return tB - tA;
+    });
+  }
+
+  // HAPUS KEKAL KELAS DARI ARKIB
+  async permanentDeleteClass(classId: string, user?: { id: string; name?: string }): Promise<void> {
+    const archivedList = getLocal<SchoolClass[]>('archived_classes', []);
+    const target = archivedList.find((c) => c.id === classId);
+    setLocal('archived_classes', archivedList.filter((c) => c.id !== classId));
+
+    try {
+      await this.ensureAuth();
+      await deleteDoc(doc(db, 'classes', classId));
+    } catch {
+      // ignore
+    }
+
+    await this.addAuditLog(
+      'Hapus Kekal Kelas Dari Arkib',
+      'class',
+      classId,
+      { className: target?.className || classId },
       user
     );
   }
@@ -975,11 +1420,8 @@ class DataService {
   }
 
   async getAttendance(): Promise<AttendanceRecord[]> {
-    if (!auth.currentUser) {
-      const local = getLocal<AttendanceRecord[]>('attendance', generateInitialAttendance());
-      return this.deduplicateAttendance(local);
-    }
     try {
+      await this.ensureAuth();
       const snap = await getDocs(collection(db, 'attendance'));
       if (!snap.empty) {
         const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }) as AttendanceRecord);
@@ -1251,10 +1693,8 @@ class DataService {
 
   // WARNING LETTERS
   async getWarningLetters(): Promise<WarningLetter[]> {
-    if (!auth.currentUser) {
-      return getLocal<WarningLetter[]>('warningLetters', []);
-    }
     try {
+      await this.ensureAuth();
       const snap = await getDocs(collection(db, 'warningLetters'));
       if (!snap.empty) {
         const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }) as WarningLetter);
@@ -1332,6 +1772,7 @@ class DataService {
     }
 
     try {
+      await this.ensureAuth();
       await setDoc(doc(db, 'warningLetters', id), sanitizeForFirestore(record), { merge: true });
     } catch (e) {
       if (auth.currentUser) {
